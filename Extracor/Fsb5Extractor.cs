@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
-namespace Extractor.Extractor
+namespace supertoolbox.Extractor
 {
     public class Fsb5Extractor : BaseExtractor
     {
