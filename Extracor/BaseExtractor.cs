@@ -1,4 +1,4 @@
-﻿namespace Extractor.Extractor
+namespace supertoolbox.Extractor
 {
     public abstract class BaseExtractor
     {
