@@ -4,7 +4,7 @@ using System.IO;
 using System.Windows.Forms;
 using System.Collections.Generic;
 
-namespace Extractor.Extractor
+namespace supertoolbox.Extractor
 {
     public partial class MainForm : Form
     {
@@ -31,7 +31,7 @@ namespace Extractor.Extractor
             string dirPath = txtFolderPath.Text;
             if (string.IsNullOrEmpty(dirPath) || !Directory.Exists(dirPath))
             {
-                AppendMessageToRichTextBox($"´íÎó: {dirPath} ²»ÊÇÒ»¸öÓĞĞ§µÄÄ¿Â¼¡£");
+                AppendMessageToRichTextBox($"é”™è¯¯: {dirPath} ä¸æ˜¯ä¸€ä¸ªæœ‰æ•ˆçš„ç›®å½•ã€‚");
                 return;
             }
 
@@ -87,7 +87,7 @@ namespace Extractor.Extractor
 
             if (choice == -1)
             {
-                AppendMessageToRichTextBox("ÎŞĞ§µÄÑ¡Ôñ¡£");
+                AppendMessageToRichTextBox("æ— æ•ˆçš„é€‰æ‹©ã€‚");
                 return;
             }
 
@@ -241,11 +241,11 @@ namespace Extractor.Extractor
                         pngExtractor.Extract(dirPath);
                         break;
                 }
-                AppendMessageToRichTextBox($"ÌáÈ¡²Ù×÷Íê³É£¬×Ü¹²ÌáÈ¡ÁË {totalFileCount} ¸öÎÄ¼ş¡£");
+                AppendMessageToRichTextBox($"æå–æ“ä½œå®Œæˆï¼Œæ€»å…±æå–äº† {totalFileCount} ä¸ªæ–‡ä»¶ã€‚");
             }
             catch (Exception ex)
             {
-                AppendMessageToRichTextBox($"ÌáÈ¡¹ı³ÌÖĞ³öÏÖ´íÎó: {ex.Message}");
+                AppendMessageToRichTextBox($"æå–è¿‡ç¨‹ä¸­å‡ºç°é”™è¯¯: {ex.Message}");
             }
         }
 
