@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace Extractor.Extractor
+namespace supertoolbox.Extractor
 {
     partial class MainForm : Form
     {
@@ -52,6 +52,7 @@ namespace Extractor.Extractor
             radioOgg = new RadioButton();
             radioJpg = new RadioButton();
             radioPng = new RadioButton();
+            radioHca = new RadioButton();
             SuspendLayout();
             // 
             // btnSelectFolder
@@ -266,12 +267,25 @@ namespace Extractor.Extractor
             radioPng.TabStop = true;
             radioPng.Text = "PNG";
             radioPng.UseVisualStyleBackColor = true;
+            //
+            //radioHca
+            //
+            radioHca.AutoSize = true;
+            radioHca.Location = new Point(14, 389);
+            radioHca.Margin = new Padding(4);
+            radioHca.Name = "radioHca";
+            radioHca.Size = new Size(24, 21);
+            radioHca.TabIndex = 19;
+            radioHca.TabStop = true;
+            radioHca.Text = "CRI - HCA - hca";
+            radioHca.UseVisualStyleBackColor = true;
             // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(994, 441);
+            Controls.Add(radioHca);
             Controls.Add(radioPng);
             Controls.Add(radioJpg);
             Controls.Add(radioOgg);
@@ -320,9 +334,10 @@ namespace Extractor.Extractor
         private System.Windows.Forms.RadioButton radioOgg;
         private System.Windows.Forms.RadioButton radioJpg;
         private System.Windows.Forms.RadioButton radioPng;
+        private System.Windows.Forms.RadioButton radioHca;
         }
     }
-namespace Extractor.Extractor
+namespace supertoolbox.Extractor
 {
     partial class MainForm : Form
     {
