@@ -1,4 +1,4 @@
-using Extractor.Extractor;
+using supertoolbox.Extractor;
 using System;
 using System.IO;
 using System.Windows.Forms;
@@ -84,7 +84,10 @@ namespace supertoolbox.Extractor
             {
                 choice = 12;
             }
-
+            else if (radioHca.Checked)
+            {
+                choice = 13;
+            }
             if (choice == -1)
             {
                 AppendMessageToRichTextBox("无效的选择。");
@@ -239,6 +242,18 @@ namespace supertoolbox.Extractor
                             }
                         };
                         pngExtractor.Extract(dirPath);
+                        break;
+                    case 13:
+                        var hcaExtractor = new HcaExtractor();
+                        hcaExtractor.FilesExtracted += (senderObj, fileNames) =>
+                        {
+                            foreach (string fileName in fileNames)
+                            {
+                                AppendMessageToRichTextBox(fileName);
+                                totalFileCount++;
+                            }
+                        };
+                        hcaExtractor.Extract(dirPath);
                         break;
                 }
                 AppendMessageToRichTextBox($"提取操作完成，总共提取了 {totalFileCount} 个文件。");
