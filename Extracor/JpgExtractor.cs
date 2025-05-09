@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace Extractor.Extractor
+namespace supertoolbox.Extractor
 {
     public class JpgExtractor
     {
