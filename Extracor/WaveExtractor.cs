@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 
-namespace Extractor.Extractor
+namespace supertoolbox.Extractor
 {
     public class WaveExtractor : BaseExtractor
     {
