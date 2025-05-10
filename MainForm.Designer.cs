@@ -1,4 +1,3 @@
-// MainForm.Designer.cs
 namespace supertoolbox.Extractor
 {
     partial class MainForm
