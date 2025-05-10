@@ -1,11 +1,7 @@
-using System;
-using System.ComponentModel;
-using System.Drawing;
-using System.Windows.Forms;
-
+// MainForm.Designer.cs
 namespace supertoolbox.Extractor
 {
-    partial class MainForm : Form
+    partial class MainForm
     {
         /// <summary>
         /// 必需的设计器变量。
@@ -33,34 +29,26 @@ namespace supertoolbox.Extractor
         /// </summary>
         private void InitializeComponent()
         {
+            components = new System.ComponentModel.Container();
             btnSelectFolder = new Button();
             txtFolderPath = new TextBox();
             btnExtract = new Button();
-            radioWave = new RadioButton();
-            radioBank = new RadioButton();
-            radioWebp = new RadioButton();
-            radioXwma = new RadioButton();
-            radioWem = new RadioButton();
-            radioXa = new RadioButton();
-            radioAdx = new RadioButton();
             richTextBox1 = new RichTextBox();
             btnClear = new Button();
-            radioAhx = new RadioButton();
-            radioFsb5 = new RadioButton();
-            label1 = new Label();
-            label2 = new Label();
-            radioOgg = new RadioButton();
-            radioJpg = new RadioButton();
-            radioPng = new RadioButton();
-            radioHca = new RadioButton();
+            treeView1 = new TreeView();
+            treeViewContextMenu = new ContextMenuStrip(components);
+            moveToAudioMenuItem = new ToolStripMenuItem();
+            moveToImageMenuItem = new ToolStripMenuItem();
+            moveToOtherMenuItem = new ToolStripMenuItem();
+            labelStatus = new Label();
+            treeViewContextMenu.SuspendLayout();
             SuspendLayout();
             // 
             // btnSelectFolder
             // 
             btnSelectFolder.Location = new Point(14, 16);
-            btnSelectFolder.Margin = new Padding(4);
             btnSelectFolder.Name = "btnSelectFolder";
-            btnSelectFolder.Size = new Size(116, 26);
+            btnSelectFolder.Size = new Size(104, 26);
             btnSelectFolder.TabIndex = 0;
             btnSelectFolder.Text = "选择文件夹";
             btnSelectFolder.UseVisualStyleBackColor = true;
@@ -68,16 +56,16 @@ namespace supertoolbox.Extractor
             // 
             // txtFolderPath
             // 
+            txtFolderPath.BackColor = Color.White;
             txtFolderPath.Location = new Point(138, 16);
-            txtFolderPath.Margin = new Padding(4);
             txtFolderPath.Name = "txtFolderPath";
-            txtFolderPath.Size = new Size(490, 23);
+            txtFolderPath.Size = new Size(490, 25);
             txtFolderPath.TabIndex = 1;
             // 
             // btnExtract
             // 
+            btnExtract.ForeColor = Color.Lime;
             btnExtract.Location = new Point(429, 408);
-            btnExtract.Margin = new Padding(4);
             btnExtract.Name = "btnExtract";
             btnExtract.Size = new Size(85, 30);
             btnExtract.TabIndex = 2;
@@ -85,94 +73,10 @@ namespace supertoolbox.Extractor
             btnExtract.UseVisualStyleBackColor = true;
             btnExtract.Click += btnExtract_Click;
             // 
-            // radioWave
-            // 
-            radioWave.AutoSize = true;
-            radioWave.Location = new Point(14, 68);
-            radioWave.Margin = new Padding(4);
-            radioWave.Name = "radioWave";
-            radioWave.Size = new Size(116, 21);
-            radioWave.TabIndex = 3;
-            radioWave.TabStop = true;
-            radioWave.Text = "RIFF - wave系列";
-            radioWave.UseVisualStyleBackColor = true;
-            // 
-            // radioBank
-            // 
-            radioBank.AutoSize = true;
-            radioBank.Location = new Point(14, 114);
-            radioBank.Margin = new Padding(4);
-            radioBank.Name = "radioBank";
-            radioBank.Size = new Size(138, 21);
-            radioBank.TabIndex = 4;
-            radioBank.TabStop = true;
-            radioBank.Text = "RIFF - Fmod - bank";
-            radioBank.UseVisualStyleBackColor = true;
-            // 
-            // radioWebp
-            // 
-            radioWebp.AutoSize = true;
-            radioWebp.Location = new Point(14, 140);
-            radioWebp.Margin = new Padding(4);
-            radioWebp.Name = "radioWebp";
-            radioWebp.Size = new Size(151, 21);
-            radioWebp.TabIndex = 5;
-            radioWebp.TabStop = true;
-            radioWebp.Text = "RIFF - Google - webp";
-            radioWebp.UseVisualStyleBackColor = true;
-            // 
-            // radioXwma
-            // 
-            radioXwma.AutoSize = true;
-            radioXwma.Location = new Point(14, 166);
-            radioXwma.Margin = new Padding(4);
-            radioXwma.Name = "radioXwma";
-            radioXwma.Size = new Size(149, 21);
-            radioXwma.TabIndex = 6;
-            radioXwma.TabStop = true;
-            radioXwma.Text = "RIFF - wmav2 - xwma";
-            radioXwma.UseVisualStyleBackColor = true;
-            // 
-            // radioWem
-            // 
-            radioWem.AutoSize = true;
-            radioWem.Location = new Point(14, 192);
-            radioWem.Margin = new Padding(4);
-            radioWem.Name = "radioWem";
-            radioWem.Size = new Size(163, 21);
-            radioWem.TabIndex = 7;
-            radioWem.TabStop = true;
-            radioWem.Text = "RIFX - BigEndian - wem";
-            radioWem.UseVisualStyleBackColor = true;
-            // 
-            // radioXa
-            // 
-            radioXa.AutoSize = true;
-            radioXa.Location = new Point(14, 218);
-            radioXa.Margin = new Padding(4);
-            radioXa.Name = "radioXa";
-            radioXa.Size = new Size(116, 21);
-            radioXa.TabIndex = 8;
-            radioXa.TabStop = true;
-            radioXa.Text = "RIFF - cdxa - xa";
-            radioXa.UseVisualStyleBackColor = true;
-            // 
-            // radioAdx
-            // 
-            radioAdx.AutoSize = true;
-            radioAdx.Location = new Point(14, 245);
-            radioAdx.Margin = new Padding(4);
-            radioAdx.Name = "radioAdx";
-            radioAdx.Size = new Size(159, 21);
-            radioAdx.TabIndex = 9;
-            radioAdx.TabStop = true;
-            radioAdx.Text = "CRI - adpcm_adx - adx";
-            radioAdx.UseVisualStyleBackColor = true;
-            // 
             // richTextBox1
             // 
+            richTextBox1.BackColor = Color.White;
             richTextBox1.Location = new Point(636, 13);
-            richTextBox1.Margin = new Padding(4);
             richTextBox1.Name = "richTextBox1";
             richTextBox1.Size = new Size(349, 425);
             richTextBox1.TabIndex = 10;
@@ -180,8 +84,8 @@ namespace supertoolbox.Extractor
             // 
             // btnClear
             // 
+            btnClear.ForeColor = Color.OrangeRed;
             btnClear.Location = new Point(540, 408);
-            btnClear.Margin = new Padding(4);
             btnClear.Name = "btnClear";
             btnClear.Size = new Size(88, 30);
             btnClear.TabIndex = 11;
@@ -189,128 +93,74 @@ namespace supertoolbox.Extractor
             btnClear.UseVisualStyleBackColor = true;
             btnClear.Click += btnClear_Click;
             // 
-            // radioAhx
+            // treeView1
             // 
-            radioAhx.AutoSize = true;
-            radioAhx.Location = new Point(14, 271);
-            radioAhx.Margin = new Padding(4);
-            radioAhx.Name = "radioAhx";
-            radioAhx.Size = new Size(158, 21);
-            radioAhx.TabIndex = 12;
-            radioAhx.TabStop = true;
-            radioAhx.Text = "CRI - adpcm_adx - ahx";
-            radioAhx.UseVisualStyleBackColor = true;
+            treeView1.ContextMenuStrip = treeViewContextMenu;
+            treeView1.Location = new Point(14, 48);
+            treeView1.Name = "treeView1";
+            treeView1.Size = new Size(614, 332);
+            treeView1.TabIndex = 12;
+            treeView1.AfterSelect += treeView1_AfterSelect;
             // 
-            // radioFsb5
+            // treeViewContextMenu
             // 
-            radioFsb5.AutoSize = true;
-            radioFsb5.Location = new Point(14, 297);
-            radioFsb5.Margin = new Padding(4);
-            radioFsb5.Name = "radioFsb5";
-            radioFsb5.Size = new Size(97, 21);
-            radioFsb5.TabIndex = 13;
-            radioFsb5.TabStop = true;
-            radioFsb5.Text = "Fmod - fsb5";
-            radioFsb5.UseVisualStyleBackColor = true;
+            treeViewContextMenu.Items.AddRange(new ToolStripItem[] { moveToAudioMenuItem, moveToImageMenuItem, moveToOtherMenuItem });
+            treeViewContextMenu.Name = "treeViewContextMenu";
+            treeViewContextMenu.Size = new Size(161, 70);
+            treeViewContextMenu.Opening += treeViewContextMenu_Opening;
             // 
-            // label1
+            // moveToAudioMenuItem
             // 
-            label1.AutoSize = true;
-            label1.Location = new Point(14, 350);
-            label1.Margin = new Padding(4, 0, 4, 0);
-            label1.Name = "label1";
-            label1.Size = new Size(0, 17);
-            label1.TabIndex = 14;
+            moveToAudioMenuItem.Name = "moveToAudioMenuItem";
+            moveToAudioMenuItem.Size = new Size(160, 22);
+            moveToAudioMenuItem.Text = "移动到音频";
+            moveToAudioMenuItem.Click += moveToAudioMenuItem_Click;
             // 
-            // label2
+            // moveToImageMenuItem
             // 
-            label2.AutoSize = true;
-            label2.ForeColor = SystemColors.GrayText;
-            label2.Location = new Point(12, 93);
-            label2.Name = "label2";
-            label2.Size = new Size(145, 17);
-            label2.TabIndex = 15;
-            label2.Text = "(wav/at3/at9/xma/wem)";
+            moveToImageMenuItem.Name = "moveToImageMenuItem";
+            moveToImageMenuItem.Size = new Size(160, 22);
+            moveToImageMenuItem.Text = "移动到图片";
+            moveToImageMenuItem.Click += moveToImageMenuItem_Click;
             // 
-            // radioOgg
+            // moveToOtherMenuItem
             // 
-            radioOgg.AutoSize = true;
-            radioOgg.Location = new Point(14, 323);
-            radioOgg.Margin = new Padding(4);
-            radioOgg.Name = "radioOgg";
-            radioOgg.Size = new Size(117, 21);
-            radioOgg.TabIndex = 16;
-            radioOgg.TabStop = true;
-            radioOgg.Text = "Xiph.Org - Ogg";
-            radioOgg.UseVisualStyleBackColor = true;
+            moveToOtherMenuItem.Name = "moveToOtherMenuItem";
+            moveToOtherMenuItem.Size = new Size(160, 22);
+            moveToOtherMenuItem.Text = "移动到其他档案";
+            moveToOtherMenuItem.Click += moveToOtherMenuItem_Click;
             // 
-            // radioJpg
+            // labelStatus
             // 
-            radioJpg.AutoSize = true;
-            radioJpg.Location = new Point(14, 345);
-            radioJpg.Margin = new Padding(4);
-            radioJpg.Name = "radioJpg";
-            radioJpg.Size = new Size(80, 21);
-            radioJpg.TabIndex = 18;
-            radioJpg.TabStop = true;
-            radioJpg.Text = "JPEG/JPG";
-            radioJpg.UseVisualStyleBackColor = true;
-            // 
-            // radioPng
-            // 
-            radioPng.AutoSize = true;
-            radioPng.Location = new Point(14, 367);
-            radioPng.Margin = new Padding(4);
-            radioPng.Name = "radioPng";
-            radioPng.Size = new Size(52, 21);
-            radioPng.TabIndex = 19;
-            radioPng.TabStop = true;
-            radioPng.Text = "PNG";
-            radioPng.UseVisualStyleBackColor = true;
-            //
-            //radioHca
-            //
-            radioHca.AutoSize = true;
-            radioHca.Location = new Point(14, 389);
-            radioHca.Margin = new Padding(4);
-            radioHca.Name = "radioHca";
-            radioHca.Size = new Size(24, 21);
-            radioHca.TabIndex = 19;
-            radioHca.TabStop = true;
-            radioHca.Text = "CRI - HCA - hca";
-            radioHca.UseVisualStyleBackColor = true;
+            labelStatus.AutoSize = true;
+            labelStatus.ForeColor = Color.Gray;
+            labelStatus.Location = new Point(14, 383);
+            labelStatus.Name = "labelStatus";
+            labelStatus.Size = new Size(104, 17);
+            labelStatus.TabIndex = 16;
+            labelStatus.Text = "请选择提取器";
             // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(994, 441);
-            Controls.Add(radioHca);
-            Controls.Add(radioPng);
-            Controls.Add(radioJpg);
-            Controls.Add(radioOgg);
-            Controls.Add(label2);
-            Controls.Add(label1);
+            ClientSize = new Size(994, 450);
+            Controls.Add(labelStatus);
+            Controls.Add(treeView1);
             Controls.Add(btnClear);
             Controls.Add(richTextBox1);
-            Controls.Add(radioFsb5);
-            Controls.Add(radioAhx);
-            Controls.Add(radioAdx);
-            Controls.Add(radioXa);
-            Controls.Add(radioWem);
-            Controls.Add(radioXwma);
-            Controls.Add(radioWebp);
-            Controls.Add(radioBank);
-            Controls.Add(radioWave);
             Controls.Add(btnExtract);
             Controls.Add(txtFolderPath);
             Controls.Add(btnSelectFolder);
-            ForeColor = Color.Blue;
+            Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            ForeColor = Color.Fuchsia;
             Margin = new Padding(4);
             Name = "MainForm";
             Text = "超级工具箱";
+            treeViewContextMenu.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
+
         }
 
         #endregion
@@ -318,28 +168,13 @@ namespace supertoolbox.Extractor
         private System.Windows.Forms.Button btnSelectFolder;
         private System.Windows.Forms.TextBox txtFolderPath;
         private System.Windows.Forms.Button btnExtract;
-        private System.Windows.Forms.RadioButton radioWave;
-        private System.Windows.Forms.RadioButton radioBank;
-        private System.Windows.Forms.RadioButton radioWebp;
-        private System.Windows.Forms.RadioButton radioXwma;
-        private System.Windows.Forms.RadioButton radioWem;
-        private System.Windows.Forms.RadioButton radioXa;
-        private System.Windows.Forms.RadioButton radioAdx;
         private System.Windows.Forms.RichTextBox richTextBox1;
         private System.Windows.Forms.Button btnClear;
-        private System.Windows.Forms.RadioButton radioAhx;
-        private System.Windows.Forms.RadioButton radioFsb5;
-        private System.Windows.Forms.Label label1;
-        private System.Windows.Forms.Label label2;
-        private System.Windows.Forms.RadioButton radioOgg;
-        private System.Windows.Forms.RadioButton radioJpg;
-        private System.Windows.Forms.RadioButton radioPng;
-        private System.Windows.Forms.RadioButton radioHca;
-        }
-    }
-namespace supertoolbox.Extractor
-{
-    partial class MainForm : Form
-    {
+        private System.Windows.Forms.TreeView treeView1;
+        private System.Windows.Forms.Label labelStatus;
+        private System.Windows.Forms.ContextMenuStrip treeViewContextMenu;
+        private System.Windows.Forms.ToolStripMenuItem moveToAudioMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem moveToImageMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem moveToOtherMenuItem;
     }
 }
