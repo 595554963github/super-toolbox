@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
@@ -11,7 +11,6 @@ namespace supertoolbox.Extractor
 
         public event EventHandler<List<string>>? FilesExtracted;
 
-        // 定义 Fsb5Header 类来存储文件头信息
         public class Fsb5Header
         {
             public int TotalSubsongs;
@@ -47,49 +46,44 @@ namespace supertoolbox.Extractor
             while ((startIndex = IndexOf(fileContent, FSB5_MAGIC_NUMBER, startIndex)) != -1)
             {
                 using (MemoryStream ms = new MemoryStream(fileContent, startIndex, fileContent.Length - startIndex))
-                using (BinaryReader br = new BinaryReader(ms))
                 {
-                    // 跳过魔数
-                    br.ReadBytes(4);
-                    header.Version = br.ReadInt32();
-                    header.TotalSubsongs = br.ReadInt32();
-                    header.SampleHeaderSize = br.ReadUInt32();
-                    header.NameTableSize = br.ReadUInt32();
-                    header.SampleDataSize = br.ReadUInt32();
-                    header.Codec = br.ReadInt32();
-                    // 跳过 4 字节的零
-                    br.ReadBytes(4);
-
-                    if (header.Version == 0x01)
+                    using (System.IO.BinaryReader br = new System.IO.BinaryReader(ms))
                     {
-                        header.Flags = br.ReadInt32();
-                        // 跳过 16 字节的哈希和 8 字节的子哈希
-                        br.ReadBytes(24);
-                        header.BaseHeaderSize = 0x3c;
-                    }
-                    else
-                    {
-                        // 跳过 4 字节的零/标志
                         br.ReadBytes(4);
-                        // 跳过 4 字节的零/标志
+                        header.Version = br.ReadInt32();
+                        header.TotalSubsongs = br.ReadInt32();
+                        header.SampleHeaderSize = br.ReadUInt32();
+                        header.NameTableSize = br.ReadUInt32();
+                        header.SampleDataSize = br.ReadUInt32();
+                        header.Codec = br.ReadInt32();
                         br.ReadBytes(4);
-                        // 跳过 16 字节的哈希
-                        br.ReadBytes(16);
-                        // 跳过 8 字节的子哈希
-                        br.ReadBytes(8);
-                        header.BaseHeaderSize = 0x40;
-                    }
 
-                    int endIndex = startIndex + (int)(header.BaseHeaderSize + header.SampleHeaderSize + header.NameTableSize + header.SampleDataSize);
-                    if (endIndex > fileContent.Length)
-                    {
-                        endIndex = fileContent.Length;
-                    }
+                        if (header.Version == 0x01)
+                        {
+                            header.Flags = br.ReadInt32();
+                            br.ReadBytes(24);
+                            header.BaseHeaderSize = 0x3c;
+                        }
+                        else
+                        {
+                            br.ReadBytes(4);
+                            br.ReadBytes(4);
+                            br.ReadBytes(16);
+                            br.ReadBytes(8);
+                            header.BaseHeaderSize = 0x40;
+                        }
 
-                    int length = endIndex - startIndex;
-                    byte[] fsb5Data = new byte[length];
-                    Array.Copy(fileContent, startIndex, fsb5Data, 0, length);
-                    yield return fsb5Data;
+                        int endIndex = startIndex + (int)(header.BaseHeaderSize + header.SampleHeaderSize + header.NameTableSize + header.SampleDataSize);
+                        if (endIndex > fileContent.Length)
+                        {
+                            endIndex = fileContent.Length;
+                        }
+
+                        int length = endIndex - startIndex;
+                        byte[] fsb5Data = new byte[length];
+                        Array.Copy(fileContent, startIndex, fsb5Data, 0, length);
+                        yield return fsb5Data;
+                    }
                 }
                 startIndex += (int)(header.BaseHeaderSize + header.SampleHeaderSize + header.NameTableSize + header.SampleDataSize);
             }
