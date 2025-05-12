@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace supertoolbox.Extractor
@@ -80,7 +81,10 @@ namespace supertoolbox.Extractor
                         string currentOutputDir = Path.Combine(outputDir, apkName);
                         Directory.CreateDirectory(currentOutputDir);
 
-                        var unpacker = new UnpackApk(apkFile, currentOutputDir, _existsMode, _isDebug);
+                        using var stream = new FileStream(apkFile, FileMode.Open, FileAccess.Read);
+                        using var reader = new System.IO.BinaryReader(stream);
+
+                        var unpacker = new UnpackApk(reader, currentOutputDir, _existsMode, _isDebug);
 
                         unpacker.FileExtracted += (sender, filePath) =>
                         {
@@ -136,7 +140,7 @@ namespace supertoolbox.Extractor
 
         protected virtual void OnExtractionError(string message)
         {
-            ExtractionError?.Invoke(this, message);
+            ExtractionError?.Invoke(this, message ?? string.Empty);
         }
 
         protected virtual void OnExtractionCompleted(string message)
@@ -147,7 +151,7 @@ namespace supertoolbox.Extractor
 
     public class UnpackApk
     {
-        private string InputApkPath { get; }
+        private System.IO.BinaryReader _reader;
         private string OutputDirPath { get; }
         private string FileExists { get; }
         private bool IsDebug { get; }
@@ -159,9 +163,9 @@ namespace supertoolbox.Extractor
         public event EventHandler<string>? ErrorOccurred;
         public event EventHandler<int>? ProcessCompletedWithCount;
 
-        public UnpackApk(string inputPath, string outputPath, string fileExists, bool debug)
+        public UnpackApk(System.IO.BinaryReader reader, string outputPath, string fileExists, bool debug)
         {
-            InputApkPath = inputPath;
+            _reader = reader;
             OutputDirPath = outputPath;
             FileExists = fileExists;
             IsDebug = debug;
@@ -176,335 +180,334 @@ namespace supertoolbox.Extractor
         public void Extract()
         {
             _fileCount = 0;
-            ProcessStarted?.Invoke(this, InputApkPath);
+            string processStartedMessage = _reader.BaseStream?.ToString() ?? "Unknown Stream";
+            ProcessStarted?.Invoke(this, processStartedMessage);
             Directory.CreateDirectory(OutputDirPath);
-
-            BinaryReader reader;
             try
             {
-                byte[] fileData = File.ReadAllBytes(InputApkPath);
-                reader = new BinaryReader(fileData);
-                reader.Seek(0);
-            }
-            catch (Exception e)
-            {
-                ErrorOccurred?.Invoke(this, $"文件读取出错: {e.Message}");
-                return;
-            }
-
-            var dump = new Dictionary<string, object>
-            {
-                ["PACKTOC"] = new Dictionary<string, object>(),
-                ["PACKFSLS"] = new Dictionary<string, object>(),
-                ["GENESTRT"] = new Dictionary<string, object>(),
-                ["FILE_AREA"] = new Dictionary<string, object>()
-            };
-
-            var fileList = new Dictionary<string, List<Dictionary<string, object>>>();
-
-            try
-            {
-                string endianness = reader.ReadStringBytes(8);
-                byte[] zero = reader.GetBuffer(8);
-
-                string packhedr = reader.ReadStringBytes(8);
-                ulong headerSize = reader.ReadU64();
-                byte[] unknown1 = reader.GetBuffer(8);
-                uint fileListOffset = reader.ReadU32();
-                byte[] unknown2 = reader.GetBuffer(4);
-                byte[] unknown3 = reader.GetBuffer(16);
-
-                string packtoc = reader.ReadStringBytes(8);
-                headerSize = reader.ReadU64();
-                int packtocStartOffset = reader.GetPosition();
-                uint tocSegSize = reader.ReadU32();
-                uint tocSegCount = reader.ReadU32();
-                byte[] unknown4 = reader.GetBuffer(4);
-                zero = reader.GetBuffer(4);
-
-                var tocSegmentList = new List<Dictionary<string, ByteSegment>>();
-                ((Dictionary<string, object>)dump["PACKTOC"])["TOC_SEGMENT_LIST"] = tocSegmentList;
-
-                for (int i = 0; i < tocSegCount; i++)
+                _reader!.BaseStream!.Seek(0, SeekOrigin.Begin);
+                var dump = new Dictionary<string, object>
                 {
-                    uint identifier = reader.ReadU32();
-                    uint nameIdx = reader.ReadU32();
-                    byte[] unknown5 = reader.GetBuffer(8);
-                    ulong fileOffset = reader.ReadU64();
-                    ulong size = reader.ReadU64();
-                    ulong zsize = reader.ReadU64();
+                    ["PACKTOC"] = new Dictionary<string, object>(),
+                    ["PACKFSLS"] = new Dictionary<string, object>(),
+                    ["GENESTRT"] = new Dictionary<string, object>(),
+                    ["FILE_AREA"] = new Dictionary<string, object>()
+                };
+                var fileList = new Dictionary<string, List<Dictionary<string, object>>>();
 
-                    tocSegmentList.Add(new Dictionary<string, ByteSegment>
-                    {
-                        ["IDENTIFIER"] = new ByteSegment("int", identifier),
-                        ["NAME_IDX"] = new ByteSegment("int", nameIdx),
-                        ["FILE_OFFSET"] = new ByteSegment("offset", fileOffset),
-                        ["SIZE"] = new ByteSegment("int", size),
-                        ["ZSIZE"] = new ByteSegment("int", zsize)
-                    });
-                }
-
-                int padCnt = (int)(packtocStartOffset + (int)headerSize) - reader.GetPosition();
-                byte[] padding = reader.GetBuffer(padCnt);
-
-                string packfsls = reader.ReadStringBytes(8);
-                headerSize = reader.ReadU64();
-                int packfslsStartOffset = reader.GetPosition();
-                uint archiveCount = reader.ReadU32();
-                uint archiveSegSize = reader.ReadU32();
-                byte[] unknown6 = reader.GetBuffer(4);
-                byte[] unknown7 = reader.GetBuffer(4);
-
-                var archiveSegmentList = new List<Dictionary<string, ByteSegment>>();
-                ((Dictionary<string, object>)dump["PACKFSLS"])["ARCHIVE_SEGMENT_LIST"] = archiveSegmentList;
-
-                for (int i = 0; i < archiveCount; i++)
+                try
                 {
-                    uint nameIdx = reader.ReadU32();
-                    byte[] unknown8 = reader.GetBuffer(4);
-                    ulong archiveOffset = reader.ReadU64();
-                    ulong size = reader.ReadU64();
-                    byte[] dummy = reader.GetBuffer(16);
+                    string endianness = ReadStringBytes(8);
+                    byte[] zero = _reader.ReadBytes(8);
 
-                    archiveSegmentList.Add(new Dictionary<string, ByteSegment>
+                    string packhedr = ReadStringBytes(8);
+                    ulong headerSize = ReadU64();
+                    byte[] unknown1 = _reader.ReadBytes(8);
+                    uint fileListOffset = ReadU32();
+                    byte[] unknown2 = _reader.ReadBytes(4);
+                    byte[] unknown3 = _reader.ReadBytes(16);
+
+                    string packtoc = ReadStringBytes(8);
+                    headerSize = ReadU64();
+                    int packtocStartOffset = (int)_reader.BaseStream.Position;
+                    uint tocSegSize = ReadU32();
+                    uint tocSegCount = ReadU32();
+                    byte[] unknown4 = _reader.ReadBytes(4);
+                    zero = _reader.ReadBytes(4);
+
+                    var tocSegmentList = new List<Dictionary<string, ByteSegment>>();
+                    ((Dictionary<string, object>)dump["PACKTOC"])["TOC_SEGMENT_LIST"] = tocSegmentList;
+
+                    for (int i = 0; i < tocSegCount; i++)
                     {
-                        ["NAME_IDX"] = new ByteSegment("int", nameIdx),
-                        ["ARCHIVE_OFFSET"] = new ByteSegment("offset", archiveOffset),
-                        ["SIZE"] = new ByteSegment("int", size)
-                    });
-                }
+                        uint identifier = ReadU32();
+                        uint nameIdx = ReadU32();
+                        byte[] unknown5 = _reader.ReadBytes(8);
+                        ulong fileOffset = ReadU64();
+                        ulong size = ReadU64();
+                        ulong zsize = ReadU64();
 
-                padCnt = (int)(packfslsStartOffset + (int)headerSize) - reader.GetPosition();
-                padding = reader.GetBuffer(padCnt);
-
-                string genestrt = reader.ReadStringBytes(8);
-                ulong genestrtSize = reader.ReadU64();
-                int genestrtStartOffset = reader.GetPosition();
-                uint strOffsetCount = reader.ReadU32();
-                byte[] unknown9 = reader.GetBuffer(4);
-                uint genestrtSize2 = reader.ReadU32();
-                ((Dictionary<string, object>)dump["GENESTRT"])["HEADER_SIZE+STR_OFFSET_LIST_SIZE"] = new ByteSegment("int", genestrtSize2);
-                genestrtSize2 = reader.ReadU32();
-
-                var strOffsetList = new List<ByteSegment>();
-                ((Dictionary<string, object>)dump["GENESTRT"])["STR_OFFSET_LIST"] = strOffsetList;
-
-                for (int i = 0; i < strOffsetCount; i++)
-                {
-                    strOffsetList.Add(new ByteSegment("int", reader.ReadU32()));
-                }
-
-                padCnt = (int)(genestrtStartOffset + (int)((ByteSegment)((Dictionary<string, object>)dump["GENESTRT"])["HEADER_SIZE+STR_OFFSET_LIST_SIZE"]).GetInt()) - reader.GetPosition();
-                ((Dictionary<string, object>)dump["GENESTRT"])["PAD"] = new ByteSegment("raw", reader.GetBuffer(padCnt));
-
-                var stringList = new List<ByteSegment>();
-                ((Dictionary<string, object>)dump["GENESTRT"])["STRING_LIST"] = stringList;
-
-                for (int i = 0; i < strOffsetCount; i++)
-                {
-                    try
-                    {
-                        string str = reader.ReadStringUtf8();
-                        stringList.Add(new ByteSegment("str", str));
-                    }
-                    catch (Exception e)
-                    {
-                        ErrorOccurred?.Invoke(this, $"字符串解码错误: {e.Message}");
-                        stringList.Add(new ByteSegment("str", ""));
-                    }
-                }
-
-                padCnt = (int)(genestrtStartOffset + (int)genestrtSize) - reader.GetPosition();
-                ((Dictionary<string, object>)dump["GENESTRT"])["TABLE_PADDING"] = new ByteSegment("raw", reader.GetBuffer(padCnt));
-
-                string geneeof = reader.ReadStringBytes(8);
-                byte[] zeroPadding = reader.GetBuffer(8);
-                byte[] tablePadding = reader.GetBuffer((int)fileListOffset - reader.GetPosition());
-
-                ((Dictionary<string, object>)dump["FILE_AREA"])["ROOT_ARCHIVE"] = new Dictionary<string, object>();
-
-                foreach (var tocSeg in tocSegmentList)
-                {
-                    string fname = stringList[(int)tocSeg["NAME_IDX"].GetInt()].StringValue.TrimEnd('\0');
-                    uint identifier = (uint)tocSeg["IDENTIFIER"].GetInt();
-                    ulong fileOffset = tocSeg["FILE_OFFSET"].GetInt();
-                    ulong size = tocSeg["SIZE"].GetInt();
-                    ulong zsize = tocSeg["ZSIZE"].GetInt();
-
-                    reader.Seek((int)fileOffset);
-                    ulong realSize = zsize == 0 ? size : zsize;
-                    if (identifier == 1 || realSize == 0)
-                    {
-                        continue;
-                    }
-
-                    byte[] file = reader.GetBuffer((int)realSize);
-                    string outPath = Path.Combine(OutputDirPath, fname);
-
-                    if (!fileList.ContainsKey(fname))
-                    {
-                        fileList[fname] = new List<Dictionary<string, object>>();
-                    }
-
-                    fileList[fname].Add(new Dictionary<string, object>
-                    {
-                        ["out_path"] = outPath,
-                        ["file"] = file,
-                        ["offset"] = fileOffset,
-                        ["zsize"] = zsize,
-                        ["fname"] = fname
-                    });
-                }
-
-                for (int i = 0; i < archiveCount; i++)
-                {
-                    string key = $"ARCHIVE #{i}";
-                    var archiveDict = new Dictionary<string, object>
-                    {
-                        ["PACKFSHD"] = new Dictionary<string, object>(),
-                        ["GENESTRT"] = new Dictionary<string, object>()
-                    };
-                    ((Dictionary<string, object>)dump["FILE_AREA"])[key] = archiveDict;
-
-                    uint nameIdx = (uint)archiveSegmentList[i]["NAME_IDX"].GetInt();
-                    ulong archiveOffset = archiveSegmentList[i]["ARCHIVE_OFFSET"].GetInt();
-                    ulong size = archiveSegmentList[i]["SIZE"].GetInt();
-                    string archiveName = stringList[(int)nameIdx].StringValue.TrimEnd('\0');
-
-                    reader.Seek((int)archiveOffset);
-                    string endiannessArchive = reader.ReadStringBytes(8);
-                    byte[] zeroArchive = reader.GetBuffer(8);
-
-                    string packfshd = reader.ReadStringBytes(8);
-                    ulong headerSizeArchive = reader.ReadU64();
-                    byte[] dummy1 = reader.GetBuffer(4);
-                    uint fileSegSize = reader.ReadU32();
-                    uint fileSegCount = reader.ReadU32();
-                    uint segCount = reader.ReadU32();
-                    byte[] dummy2 = reader.GetBuffer(16);
-
-                    var fileSegList = new List<Dictionary<string, ByteSegment>>();
-                    ((Dictionary<string, object>)archiveDict["PACKFSHD"])["FILE_SEG_LIST"] = fileSegList;
-
-                    for (int j = 0; j < fileSegCount; j++)
-                    {
-                        uint segNameIdx = reader.ReadU32();
-                        uint zip = reader.ReadU32();
-                        ulong offset = reader.ReadU64();
-                        ulong segSize = reader.ReadU64();
-                        ulong segZsize = reader.ReadU64();
-
-                        fileSegList.Add(new Dictionary<string, ByteSegment>
+                        tocSegmentList.Add(new Dictionary<string, ByteSegment>
                         {
-                            ["NAME_IDX"] = new ByteSegment("int", segNameIdx),
-                            ["ZIP"] = new ByteSegment("int", zip),
-                            ["OFFSET"] = new ByteSegment("offset", offset),
-                            ["SIZE"] = new ByteSegment("int", segSize),
-                            ["ZSIZE"] = new ByteSegment("int", segZsize)
+                            ["IDENTIFIER"] = new ByteSegment("int", identifier),
+                            ["NAME_IDX"] = new ByteSegment("int", nameIdx),
+                            ["FILE_OFFSET"] = new ByteSegment("offset", fileOffset),
+                            ["SIZE"] = new ByteSegment("int", size),
+                            ["ZSIZE"] = new ByteSegment("int", zsize)
                         });
                     }
 
-                    string genestrtArchive = reader.ReadStringBytes(8);
-                    ulong genestrtSizeArchive = reader.ReadU64();
-                    int genestrtStartOffsetArchive = reader.GetPosition();
-                    uint strOffsetCountArchive = reader.ReadU32();
-                    byte[] unknown10 = reader.GetBuffer(4);
-                    uint genestrtSize2Archive = reader.ReadU32();
-                    ((Dictionary<string, object>)archiveDict["GENESTRT"])["HEADER_SIZE+STR_OFFSET_LIST_SIZE"] = new ByteSegment("int", genestrtSize2Archive);
-                    genestrtSize2Archive = reader.ReadU32();
-                    ((Dictionary<string, object>)archiveDict["GENESTRT"])["GENESTRT_SIZE_2"] = new ByteSegment("int", genestrtSize2Archive);
+                    int padCnt = (int)(packtocStartOffset + (int)headerSize) - (int)_reader.BaseStream.Position;
+                    byte[] padding = _reader.ReadBytes(padCnt);
 
-                    var archiveStrOffsetList = new List<ByteSegment>();
-                    ((Dictionary<string, object>)archiveDict["GENESTRT"])["STR_OFFSET_LIST"] = archiveStrOffsetList;
+                    string packfsls = ReadStringBytes(8);
+                    headerSize = ReadU64();
+                    int packfslsStartOffset = (int)_reader.BaseStream.Position;
+                    uint archiveCount = ReadU32();
+                    uint archiveSegSize = ReadU32();
+                    byte[] unknown6 = _reader.ReadBytes(4);
+                    byte[] unknown7 = _reader.ReadBytes(4);
 
-                    for (int j = 0; j < strOffsetCountArchive; j++)
+                    var archiveSegmentList = new List<Dictionary<string, ByteSegment>>();
+                    ((Dictionary<string, object>)dump["PACKFSLS"])["ARCHIVE_SEGMENT_LIST"] = archiveSegmentList;
+
+                    for (int i = 0; i < archiveCount; i++)
                     {
-                        archiveStrOffsetList.Add(new ByteSegment("int", reader.ReadU32()));
+                        uint nameIdx = ReadU32();
+                        byte[] unknown8 = _reader.ReadBytes(4);
+                        ulong archiveOffset = ReadU64();
+                        ulong size = ReadU64();
+                        byte[] dummy = _reader.ReadBytes(16);
+
+                        archiveSegmentList.Add(new Dictionary<string, ByteSegment>
+                        {
+                            ["NAME_IDX"] = new ByteSegment("int", nameIdx),
+                            ["ARCHIVE_OFFSET"] = new ByteSegment("offset", archiveOffset),
+                            ["SIZE"] = new ByteSegment("int", size)
+                        });
                     }
 
-                    padCnt = (int)(genestrtStartOffsetArchive + (int)((ByteSegment)((Dictionary<string, object>)archiveDict["GENESTRT"])["HEADER_SIZE+STR_OFFSET_LIST_SIZE"]).GetInt()) - reader.GetPosition();
-                    byte[] archivePadding = reader.GetBuffer(padCnt);
+                    padCnt = (int)(packfslsStartOffset + (int)headerSize) - (int)_reader.BaseStream.Position;
+                    padding = _reader.ReadBytes(padCnt);
 
-                    var archiveStringList = new List<ByteSegment>();
-                    ((Dictionary<string, object>)archiveDict["GENESTRT"])["STRING_LIST"] = archiveStringList;
+                    string genestrt = ReadStringBytes(8);
+                    ulong genestrtSize = ReadU64();
+                    int genestrtStartOffset = (int)_reader.BaseStream.Position;
+                    uint strOffsetCount = ReadU32();
+                    byte[] unknown9 = _reader.ReadBytes(4);
+                    uint genestrtSize2 = ReadU32();
+                    ((Dictionary<string, object>)dump["GENESTRT"])["HEADER_SIZE+STR_OFFSET_LIST_SIZE"] = new ByteSegment("int", genestrtSize2);
+                    genestrtSize2 = ReadU32();
 
-                    for (int j = 0; j < strOffsetCountArchive; j++)
+                    var strOffsetList = new List<ByteSegment>();
+                    ((Dictionary<string, object>)dump["GENESTRT"])["STR_OFFSET_LIST"] = strOffsetList;
+
+                    for (int i = 0; i < strOffsetCount; i++)
+                    {
+                        strOffsetList.Add(new ByteSegment("int", ReadU32()));
+                    }
+
+                    padCnt = (int)(genestrtStartOffset + (int)((ByteSegment)((Dictionary<string, object>)dump["GENESTRT"])["HEADER_SIZE+STR_OFFSET_LIST_SIZE"]).GetInt()) - (int)_reader.BaseStream.Position;
+                    ((Dictionary<string, object>)dump["GENESTRT"])["PAD"] = new ByteSegment("raw", _reader.ReadBytes(padCnt));
+
+                    var stringList = new List<ByteSegment>();
+                    ((Dictionary<string, object>)dump["GENESTRT"])["STRING_LIST"] = stringList;
+
+                    for (int i = 0; i < strOffsetCount; i++)
                     {
                         try
                         {
-                            string str = reader.ReadStringUtf8();
-                            archiveStringList.Add(new ByteSegment("str", str));
+                            string str = ReadStringUtf8();
+                            stringList.Add(new ByteSegment("str", str));
                         }
                         catch (Exception e)
                         {
-                            ErrorOccurred?.Invoke(this, $"字符串解码错误: {e.Message}");
-                            archiveStringList.Add(new ByteSegment("str", ""));
+                            string errorMessage = $"字符串解码错误: {e.Message}";
+                            ErrorOccurred?.Invoke(this, errorMessage);
+                            stringList.Add(new ByteSegment("str", string.Empty));
                         }
                     }
 
-                    padCnt = (int)(genestrtStartOffsetArchive + (int)genestrtSizeArchive) - reader.GetPosition();
-                    ((Dictionary<string, object>)archiveDict["GENESTRT"])["TABLE_PADDING"] = new ByteSegment("raw", reader.GetBuffer(padCnt));
+                    padCnt = (int)(genestrtStartOffset + (int)genestrtSize) - (int)_reader.BaseStream.Position;
+                    ((Dictionary<string, object>)dump["GENESTRT"])["TABLE_PADDING"] = new ByteSegment("raw", _reader.ReadBytes(padCnt));
 
-                    ((Dictionary<string, object>)archiveDict)["FILE_AREA"] = new Dictionary<string, object>();
+                    string geneeof = ReadStringBytes(8);
+                    byte[] zeroPadding = _reader.ReadBytes(8);
+                    byte[] tablePadding = _reader.ReadBytes((int)fileListOffset - (int)_reader.BaseStream.Position);
 
-                    foreach (var fileSeg in fileSegList)
+                    ((Dictionary<string, object>)dump["FILE_AREA"])["ROOT_ARCHIVE"] = new Dictionary<string, object>();
+
+                    foreach (var tocSeg in tocSegmentList)
                     {
-                        ulong offset = fileSeg["OFFSET"].GetInt();
-                        ulong zsize = fileSeg["ZSIZE"].GetInt();
-                        ulong segSize = fileSeg["SIZE"].GetInt();
-                        uint segNameIdx = (uint)fileSeg["NAME_IDX"].GetInt();
-                        string fname = archiveStringList[(int)segNameIdx].StringValue.TrimEnd('\0');
+                        string fname = stringList[(int)tocSeg["NAME_IDX"].GetInt()].StringValue.TrimEnd('\0');
+                        uint identifier = (uint)tocSeg["IDENTIFIER"].GetInt();
+                        ulong fileOffset = tocSeg["FILE_OFFSET"].GetInt();
+                        ulong size = tocSeg["SIZE"].GetInt();
+                        ulong zsize = tocSeg["ZSIZE"].GetInt();
 
-                        reader.Seek((int)(archiveOffset + offset));
-                        ulong realSize = zsize == 0 ? segSize : zsize;
-                        if (realSize == 0)
+                        _reader.BaseStream.Seek((long)fileOffset, SeekOrigin.Begin);
+                        ulong realSize = zsize == 0 ? size : zsize;
+                        if (identifier == 1 || realSize == 0)
                         {
                             continue;
                         }
 
-                        byte[] file = reader.GetBuffer((int)realSize);
-                        string outPath = Path.Combine(OutputDirPath, archiveName, fname);
-                        string fullName = $"{archiveName}/{fname}";
+                        byte[] file = _reader.ReadBytes((int)realSize);
+                        string outPath = Path.Combine(OutputDirPath, fname);
 
-                        if (!fileList.ContainsKey(fullName))
+                        if (!fileList.ContainsKey(fname))
                         {
-                            fileList[fullName] = new List<Dictionary<string, object>>();
+                            fileList[fname] = new List<Dictionary<string, object>>();
                         }
 
-                        fileList[fullName].Add(new Dictionary<string, object>
+                        fileList[fname].Add(new Dictionary<string, object>
                         {
                             ["out_path"] = outPath,
                             ["file"] = file,
-                            ["offset"] = archiveOffset + offset,
+                            ["offset"] = fileOffset,
                             ["zsize"] = zsize,
-                            ["fname"] = fullName
+                            ["fname"] = fname
                         });
                     }
-                }
 
-                foreach (var kvp in fileList)
-                {
-                    bool isSameName = kvp.Value.Count > 1;
-                    foreach (var obj in kvp.Value)
+                    for (int i = 0; i < archiveCount; i++)
                     {
-                        string outPath = (string)obj["out_path"];
-                        byte[] file = (byte[])obj["file"];
-                        ulong offset = (ulong)obj["offset"];
-                        string fname = (string)obj["fname"];
-
-                        if (ExtractFile(outPath, file, offset, isSameName, (ulong)obj["zsize"] != 0))
+                        string key = $"ARCHIVE #{i}";
+                        var archiveDict = new Dictionary<string, object>
                         {
-                            _fileCount++;
+                            ["PACKFSHD"] = new Dictionary<string, object>(),
+                            ["GENESTRT"] = new Dictionary<string, object>()
+                        };
+                        ((Dictionary<string, object>)dump["FILE_AREA"])[key] = archiveDict;
+
+                        uint nameIdx = (uint)archiveSegmentList[i]["NAME_IDX"].GetInt();
+                        ulong archiveOffset = archiveSegmentList[i]["ARCHIVE_OFFSET"].GetInt();
+                        ulong size = archiveSegmentList[i]["SIZE"].GetInt();
+                        string archiveName = stringList[(int)nameIdx].StringValue.TrimEnd('\0');
+
+                        _reader.BaseStream.Seek((long)archiveOffset, SeekOrigin.Begin);
+                        string endiannessArchive = ReadStringBytes(8);
+                        byte[] zeroArchive = _reader.ReadBytes(8);
+
+                        string packfshd = ReadStringBytes(8);
+                        ulong headerSizeArchive = ReadU64();
+                        byte[] dummy1 = _reader.ReadBytes(4);
+                        uint fileSegSize = ReadU32();
+                        uint fileSegCount = ReadU32();
+                        uint segCount = ReadU32();
+                        byte[] dummy2 = _reader.ReadBytes(16);
+
+                        var fileSegList = new List<Dictionary<string, ByteSegment>>();
+                        ((Dictionary<string, object>)archiveDict["PACKFSHD"])["FILE_SEG_LIST"] = fileSegList;
+
+                        for (int j = 0; j < fileSegCount; j++)
+                        {
+                            uint segNameIdx = ReadU32();
+                            uint zip = ReadU32();
+                            ulong offset = ReadU64();
+                            ulong segSize = ReadU64();
+                            ulong segZsize = ReadU64();
+
+                            fileSegList.Add(new Dictionary<string, ByteSegment>
+                            {
+                                ["NAME_IDX"] = new ByteSegment("int", segNameIdx),
+                                ["ZIP"] = new ByteSegment("int", zip),
+                                ["OFFSET"] = new ByteSegment("offset", offset),
+                                ["SIZE"] = new ByteSegment("int", segSize),
+                                ["ZSIZE"] = new ByteSegment("int", segZsize)
+                            });
+                        }
+
+                        string genestrtArchive = ReadStringBytes(8);
+                        ulong genestrtSizeArchive = ReadU64();
+                        int genestrtStartOffsetArchive = (int)_reader.BaseStream.Position;
+                        uint strOffsetCountArchive = ReadU32();
+                        byte[] unknown10 = _reader.ReadBytes(4);
+                        uint genestrtSize2Archive = ReadU32();
+                        ((Dictionary<string, object>)archiveDict["GENESTRT"])["HEADER_SIZE+STR_OFFSET_LIST_SIZE"] = new ByteSegment("int", genestrtSize2Archive);
+                        genestrtSize2Archive = ReadU32();
+                        ((Dictionary<string, object>)archiveDict["GENESTRT"])["GENESTRT_SIZE_2"] = new ByteSegment("int", genestrtSize2Archive);
+
+                        var archiveStrOffsetList = new List<ByteSegment>();
+                        ((Dictionary<string, object>)archiveDict["GENESTRT"])["STR_OFFSET_LIST"] = archiveStrOffsetList;
+
+                        for (int j = 0; j < strOffsetCountArchive; j++)
+                        {
+                            archiveStrOffsetList.Add(new ByteSegment("int", ReadU32()));
+                        }
+
+                        padCnt = (int)(genestrtStartOffsetArchive + (int)((ByteSegment)((Dictionary<string, object>)archiveDict["GENESTRT"])["HEADER_SIZE+STR_OFFSET_LIST_SIZE"]).GetInt()) - (int)_reader.BaseStream.Position;
+                        byte[] archivePadding = _reader.ReadBytes(padCnt);
+
+                        var archiveStringList = new List<ByteSegment>();
+                        ((Dictionary<string, object>)archiveDict["GENESTRT"])["STRING_LIST"] = archiveStringList;
+
+                        for (int j = 0; j < strOffsetCountArchive; j++)
+                        {
+                            try
+                            {
+                                string str = ReadStringUtf8();
+                                archiveStringList.Add(new ByteSegment("str", str));
+                            }
+                            catch (Exception e)
+                            {
+                                string errorMessage = $"字符串解码错误: {e.Message}";
+                                ErrorOccurred?.Invoke(this, errorMessage);
+                                archiveStringList.Add(new ByteSegment("str", string.Empty));
+                            }
+                        }
+
+                        padCnt = (int)(genestrtStartOffsetArchive + (int)genestrtSizeArchive) - (int)_reader.BaseStream.Position;
+                        ((Dictionary<string, object>)archiveDict["GENESTRT"])["TABLE_PADDING"] = new ByteSegment("raw", _reader.ReadBytes(padCnt));
+
+                        ((Dictionary<string, object>)archiveDict)["FILE_AREA"] = new Dictionary<string, object>();
+
+                        foreach (var fileSeg in fileSegList)
+                        {
+                            ulong offset = fileSeg["OFFSET"].GetInt();
+                            ulong zsize = fileSeg["ZSIZE"].GetInt();
+                            ulong segSize = fileSeg["SIZE"].GetInt();
+                            uint segNameIdx = (uint)fileSeg["NAME_IDX"].GetInt();
+                            string fname = archiveStringList[(int)segNameIdx].StringValue.TrimEnd('\0');
+
+                            _reader.BaseStream.Seek((long)(archiveOffset + offset), SeekOrigin.Begin);
+                            ulong realSize = zsize == 0 ? segSize : zsize;
+                            if (realSize == 0)
+                            {
+                                continue;
+                            }
+
+                            byte[] file = _reader.ReadBytes((int)realSize);
+                            string outPath = Path.Combine(OutputDirPath, archiveName, fname);
+                            string fullName = $"{archiveName}/{fname}";
+
+                            if (!fileList.ContainsKey(fullName))
+                            {
+                                fileList[fullName] = new List<Dictionary<string, object>>();
+                            }
+
+                            fileList[fullName].Add(new Dictionary<string, object>
+                            {
+                                ["out_path"] = outPath,
+                                ["file"] = file,
+                                ["offset"] = archiveOffset + offset,
+                                ["zsize"] = zsize,
+                                ["fname"] = fullName
+                            });
                         }
                     }
-                }
 
-                ProcessCompleted?.Invoke(this, InputApkPath);
-                ProcessCompletedWithCount?.Invoke(this, _fileCount);
+                    foreach (var kvp in fileList)
+                    {
+                        bool isSameName = kvp.Value.Count > 1;
+                        foreach (var obj in kvp.Value)
+                        {
+                            string outPath = (string)obj["out_path"];
+                            byte[] file = (byte[])obj["file"];
+                            ulong offset = (ulong)obj["offset"];
+                            string fname = (string)obj["fname"];
+
+                            if (ExtractFile(outPath, file, offset, isSameName, (ulong)obj["zsize"] != 0))
+                            {
+                                _fileCount++;
+                            }
+                        }
+                    }
+
+                    string processCompletedMessage = _reader.BaseStream?.ToString() ?? "Unknown Stream";
+                    ProcessCompleted?.Invoke(this, processCompletedMessage);
+                    ProcessCompletedWithCount?.Invoke(this, _fileCount);
+                }
+                catch (Exception e)
+                {
+                    string errorMessage = $"解析错误: {e.Message}";
+                    ErrorOccurred?.Invoke(this, errorMessage);
+                }
             }
             catch (Exception e)
             {
-                ErrorOccurred?.Invoke(this, $"解析错误: {e.Message}");
+                string errorMessage = $"提取时出错: {e.Message}";
+                ErrorOccurred?.Invoke(this, errorMessage);
             }
         }
 
@@ -524,7 +527,8 @@ namespace supertoolbox.Extractor
                 }
                 catch (Exception e)
                 {
-                    ErrorOccurred?.Invoke(this, $"解压错误: {e.Message}");
+                    string errorMessage = $"解压错误: {e.Message}";
+                    ErrorOccurred?.Invoke(this, errorMessage);
                     return false;
                 }
             }
@@ -560,91 +564,37 @@ namespace supertoolbox.Extractor
             }
             catch (Exception e)
             {
-                ErrorOccurred?.Invoke(this, $"写入错误: {e.Message}");
+                string errorMessage = $"写入错误: {e.Message}";
+                ErrorOccurred?.Invoke(this, errorMessage);
                 return false;
             }
         }
-    }
 
-    public class BinaryReader : IDisposable
-    {
-        private byte[] _raw;
-        private int _offset;
-
-        public BinaryReader(byte[] data)
+        private string ReadStringBytes(int count)
         {
-            _raw = data;
-            _offset = 0;
+            byte[] buffer = _reader.ReadBytes(count);
+            return Encoding.ASCII.GetString(buffer);
         }
 
-        public int Size()
+        private uint ReadU32()
         {
-            return _raw.Length;
+            return _reader.ReadUInt32();
         }
 
-        public byte[] GetBuffer(int length)
+        private ulong ReadU64()
         {
-            if (_offset + length <= _raw.Length)
+            return _reader.ReadUInt64();
+        }
+
+        private string ReadStringUtf8()
+        {
+            List<byte> bytes = new List<byte>();
+            byte b;
+            while ((b = _reader.ReadByte()) != 0)
             {
-                byte[] result = new byte[length];
-                Buffer.BlockCopy(_raw, _offset, result, 0, length);
-                _offset += length;
-                return result;
+                bytes.Add(b);
             }
-            return new byte[0];
-        }
-
-        public void Seek(int offset)
-        {
-            _offset = offset;
-        }
-
-        public int GetPosition()
-        {
-            return _offset;
-        }
-
-        public uint ReadU32()
-        {
-            if (_offset + 4 > _raw.Length)
-                return 0;
-
-            uint result = BitConverter.ToUInt32(_raw, _offset);
-            _offset += 4;
-            return result;
-        }
-
-        public ulong ReadU64()
-        {
-            if (_offset + 8 > _raw.Length)
-                return 0;
-
-            ulong result = BitConverter.ToUInt64(_raw, _offset);
-            _offset += 8;
-            return result;
-        }
-
-        public string ReadStringUtf8()
-        {
-            int start = _offset;
-            while (_offset < _raw.Length && _raw[_offset] != 0)
-                _offset++;
-
-            string result = Encoding.UTF8.GetString(_raw, start, _offset - start);
-            _offset++;
-            return result;
-        }
-
-        public string ReadStringBytes(int n)
-        {
-            string result = Encoding.ASCII.GetString(_raw, _offset, n);
-            _offset += n;
-            return result;
-        }
-
-        public void Dispose()
-        {
-            _raw = Array.Empty<byte>();
+            return Encoding.UTF8.GetString(bytes.ToArray());
         }
     }
 
