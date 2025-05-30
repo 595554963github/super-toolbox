@@ -1,3 +1,4 @@
+using supertoolbox.Extractor;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -38,7 +39,7 @@ namespace supertoolbox.Extractor
             { "RIFF - cdxa - xa", "音频" },
             { "CRI - adpcm_adx - adx", "音频" },
             { "CRI - adpcm_adx - ahx", "音频" },
-            { "Fmod - fsb5", "音频" },
+            { "Fmod - fsb5", "音频" }, //正当防卫4专用，也可以用于从bank里面提取fsb
             { "Xiph.Org - Ogg", "音频" },
             { "CRI - HCA - hca", "音频" },
             { "RIFF - Google - webp", "图片" },
