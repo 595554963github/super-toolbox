@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -9,13 +9,14 @@ namespace supertoolbox.Extractor
     public class PngExtractor : BaseExtractor
     {
         private readonly object _lockObject = new object();
+        private new int _extractedFileCount = 0;
 
         public new event EventHandler<string>? FileExtracted;
         public event EventHandler<string>? ExtractionProgress;
         public new event EventHandler<int>? ExtractionCompleted;
 
-        private static readonly byte[] PNG_START_HEADER = { 0x89, 0x50, 0x4E, 0x47 };
-        private static readonly byte[] PNG_END_HEADER = { 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82 };
+        private static readonly byte[] START_SEQUENCE = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        private static readonly byte[] END_SEQUENCE = { 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82 };
 
         public override void Extract(string directoryPath)
         {
@@ -31,12 +32,17 @@ namespace supertoolbox.Extractor
                 return;
             }
 
-            var files = Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories).ToList();
-            TotalFilesToExtract = files.Count;
-            ExtractionProgress?.Invoke(this, $"开始处理 {files.Count} 个文件...");
-            OnFileExtracted($"开始处理 {files.Count} 个文件...");
+            var files = Directory.GetFiles(directoryPath, "*.*", SearchOption.AllDirectories);
+            TotalFilesToExtract = files.Length;
+            ExtractionProgress?.Invoke(this, $"开始处理 {files.Length} 个文件...");
+            OnFileExtracted($"开始处理 {files.Length} 个文件...");
 
-            int processedFiles = 0;
+            string extractedDir = Path.Combine(directoryPath, "extracted");
+            if (!Directory.Exists(extractedDir))
+            {
+                Directory.CreateDirectory(extractedDir);
+                ExtractionProgress?.Invoke(this, $"创建文件夹: {extractedDir}");
+            }
 
             foreach (var file in files)
             {
@@ -44,7 +50,7 @@ namespace supertoolbox.Extractor
 
                 try
                 {
-                    await ProcessFileAsync(file, cancellationToken);
+                    await ProcessFileAsync(file, extractedDir, cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -57,126 +63,91 @@ namespace supertoolbox.Extractor
                     ExtractionProgress?.Invoke(this, $"处理文件 {file} 时出错: {ex.Message}");
                     OnExtractionFailed($"处理文件 {file} 时出错: {ex.Message}");
                 }
-                finally
-                {
-                    processedFiles++;
-                    OnFileExtracted(file);
-                }
             }
 
-            ExtractionCompleted?.Invoke(this, ExtractedFileCount);
+            ExtractionCompleted?.Invoke(this, _extractedFileCount);
             OnExtractionCompleted();
-            ExtractionProgress?.Invoke(this, $"提取完成: 共找到 {ExtractedFileCount} 个PNG文件");
+            ExtractionProgress?.Invoke(this, $"提取完成: 共找到 {_extractedFileCount} 个PNG文件");
         }
 
-        private async Task ProcessFileAsync(string filePath, CancellationToken cancellationToken)
+        private async Task ProcessFileAsync(string filePath, string destinationFolder, CancellationToken cancellationToken)
         {
-            try
-            {
-                if (Path.GetExtension(filePath).Equals(".png", StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
+            byte[] content = await File.ReadAllBytesAsync(filePath, cancellationToken);
+            string fileName = Path.GetFileName(filePath);
+            string filePrefix = Path.GetFileNameWithoutExtension(fileName);
 
-                byte[] fileContent = await File.ReadAllBytesAsync(filePath, cancellationToken);
-                var extractedFiles = new List<string>();
-
-                foreach (byte[] pngData in ExtractPngData(fileContent))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    SavePngFile(pngData, filePath, extractedFiles);
-                }
-
-                if (extractedFiles.Count > 0)
-                {
-                    foreach (var extractedFile in extractedFiles)
-                    {
-                        FileExtracted?.Invoke(this, extractedFile);
-                        base.OnFileExtracted(extractedFile);
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                ExtractionProgress?.Invoke(this, $"处理文件 {filePath} 时出错: {ex.Message}");
-            }
-        }
-
-        private void SavePngFile(byte[] pngData, string sourceFilePath, List<string> extractedFiles)
-        {
-            string baseFilename = Path.GetFileNameWithoutExtension(sourceFilePath);
-            string dirName = Path.GetDirectoryName(sourceFilePath) ?? Directory.GetCurrentDirectory();
-
-            int currentCount = Interlocked.Increment(ref _extractedFileCount);
-            string extractedFilename = $"{baseFilename}_{currentCount}.png";
-            string extractedPath = Path.Combine(dirName, extractedFilename);
-
-            try
-            {
-                string? dirToCreate = Path.GetDirectoryName(extractedPath);
-                if (!string.IsNullOrEmpty(dirToCreate) && !Directory.Exists(dirToCreate))
-                {
-                    Directory.CreateDirectory(dirToCreate);
-                }
-
-                File.WriteAllBytes(extractedPath, pngData);
-                extractedFiles.Add(extractedPath);
-
-                Interlocked.Exchange(ref _extractedFileCount, _extractedFileCount);
-            }
-            catch (Exception ex)
-            {
-                ExtractionProgress?.Invoke(this, $"保存文件 {extractedFilename} 时出错: {ex.Message}");
-            }
-        }
-
-        private new int _extractedFileCount = 0;
-
-        private static IEnumerable<byte[]> ExtractPngData(byte[] fileContent)
-        {
             int startIndex = 0;
-            while ((startIndex = IndexOf(fileContent, PNG_START_HEADER, startIndex)) != -1)
+            int fileCount = 0;
+
+            while ((startIndex = FindSequence(content, START_SEQUENCE, startIndex)) != -1)
             {
-                int endIndex = IndexOf(fileContent, PNG_END_HEADER, startIndex + PNG_START_HEADER.Length);
-                if (endIndex != -1)
+                cancellationToken.ThrowIfCancellationRequested();
+
+                int endIndex = FindSequence(content, END_SEQUENCE, startIndex);
+                if (endIndex == -1) break;
+
+                endIndex += END_SEQUENCE.Length;
+                byte[] pngData = new byte[endIndex - startIndex];
+                Array.Copy(content, startIndex, pngData, 0, pngData.Length);
+
+                if (IsValidPng(pngData))
                 {
-                    endIndex += PNG_END_HEADER.Length;
-                    int length = endIndex - startIndex;
-                    byte[] pngData = new byte[length];
-                    Array.Copy(fileContent, startIndex, pngData, 0, length);
-                    yield return pngData;
-                    startIndex = endIndex;
+                    fileCount++;
+                    SavePngFile(pngData, destinationFolder, filePrefix, fileCount);
                 }
-                else
-                {
-                    break;
-                }
+
+                startIndex = endIndex;
             }
         }
 
-        private static int IndexOf(byte[] source, byte[] pattern, int startIndex)
+        private void SavePngFile(byte[] pngData, string destinationFolder, string filePrefix, int fileCount)
         {
-            for (int i = startIndex; i <= source.Length - pattern.Length; i++)
+            string newFileName = $"{filePrefix}_{fileCount}.png";
+            string filePath = Path.Combine(destinationFolder, newFileName);
+
+            try
             {
-                bool found = true;
-                for (int j = 0; j < pattern.Length; j++)
+                File.WriteAllBytes(filePath, pngData);
+
+                int count = Interlocked.Increment(ref _extractedFileCount);
+
+                FileExtracted?.Invoke(this, $"已提取: {newFileName}");
+                OnFileExtracted(filePath);
+            }
+            catch (Exception ex)
+            {
+                ExtractionProgress?.Invoke(this, $"保存文件 {newFileName} 时出错: {ex.Message}");
+            }
+        }
+
+        private static int FindSequence(byte[] content, byte[] sequence, int startIndex)
+        {
+            for (int i = startIndex; i <= content.Length - sequence.Length; i++)
+            {
+                bool match = true;
+                for (int j = 0; j < sequence.Length; j++)
                 {
-                    if (source[i + j] != pattern[j])
+                    if (content[i + j] != sequence[j])
                     {
-                        found = false;
+                        match = false;
                         break;
                     }
                 }
-                if (found)
-                {
-                    return i;
-                }
+                if (match) return i;
             }
             return -1;
         }
+
+        private static bool IsValidPng(byte[] data)
+        {
+            if (data.Length < 8) return false;
+            
+            for (int i = 0; i < START_SEQUENCE.Length; i++)
+            {
+                if (data[i] != START_SEQUENCE[i]) return false;
+            }
+            
+            return true;
+        }
     }
-}
+}    
