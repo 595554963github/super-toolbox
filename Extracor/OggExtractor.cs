@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -8,6 +8,9 @@ namespace supertoolbox.Extractor
 {
     public class OggExtractor : BaseExtractor
     {
+        private bool _stopParsingOnFormatError = true;
+        private int _globalIndex = 0;
+
         public override async Task ExtractAsync(string directoryPath, CancellationToken cancellationToken = default)
         {
             await Task.Run(() =>
@@ -69,17 +72,17 @@ namespace supertoolbox.Extractor
                 }
             }, cancellationToken);
         }
+
         protected virtual void OnProgressUpdated()
         {
             Console.WriteLine($"已提取文件数: {ExtractedFileCount}/{TotalFilesToExtract}");
         }
+
         private int ProcessFile(string filePath, string outputDir)
         {
             long offset = 0;
             int fileCount = 0;
             Dictionary<uint, FileStream> outputStreams = new Dictionary<uint, FileStream>();
-            int globalIndex = 0;
-
             string fileNamePrefix = Path.GetFileNameWithoutExtension(filePath);
 
             using (FileStream fs = File.Open(filePath, FileMode.Open, FileAccess.Read))
@@ -100,46 +103,85 @@ namespace supertoolbox.Extractor
 
                         long pageSize = 0x1B + segmentCount + sizeOfAllSegments;
                         byte[] rawPageBytes = ParseFile.ParseSimpleOffset(fs, offset, (int)pageSize);
+                        bool pageWrittenToFile = false;
 
                         if ((pageType & XiphOrgOggContainer.PAGE_TYPE_BEGIN_STREAM) == XiphOrgOggContainer.PAGE_TYPE_BEGIN_STREAM)
                         {
                             if (outputStreams.ContainsKey(bitstreamSerialNumber))
                             {
-                                OnExtractionFailed($"多次找到流开始页面，但没有流结束页面，用于序列号: {bitstreamSerialNumber:X8}，文件: {filePath}");
-                                continue;
+                                if (_stopParsingOnFormatError)
+                                {
+                                    throw new FormatException(
+                                        $"多次找到流开始页面，但没有流结束页面，用于序列号: {bitstreamSerialNumber:X8}，文件: {filePath}");
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"警告：对于文件 <{filePath}>，多次找到流开始页面但没有流结束页面，序列号为: {bitstreamSerialNumber:X8}。");
+                                    continue;
+                                }
                             }
+                            else
+                            {
+                                string outputFileName = Path.Combine(outputDir, $"{fileNamePrefix}_{_globalIndex}.ogg");
+                                outputFileName = GetNonDuplicateFileName(outputFileName);
 
-                            string outputFileName = Path.Combine(outputDir, $"{fileNamePrefix}_{globalIndex}.ogg");
-                            outputFileName = GetNonDuplicateFileName(outputFileName);
+                                outputStreams[bitstreamSerialNumber] = File.Open(outputFileName, FileMode.CreateNew, FileAccess.Write);
+                                outputStreams[bitstreamSerialNumber].Write(rawPageBytes, 0, rawPageBytes.Length);
+                                pageWrittenToFile = true;
 
-                            outputStreams[bitstreamSerialNumber] = File.Open(outputFileName, FileMode.CreateNew, FileAccess.Write);
-                            outputStreams[bitstreamSerialNumber].Write(rawPageBytes, 0, rawPageBytes.Length);
-
-                            OnFileExtracted(outputFileName);
-                            fileCount++;
-                            globalIndex++;
+                                OnFileExtracted(outputFileName);
+                                fileCount++;
+                                _globalIndex++;
+                            }
                         }
+
                         if (outputStreams.ContainsKey(bitstreamSerialNumber))
                         {
-                            outputStreams[bitstreamSerialNumber].Write(rawPageBytes, 0, rawPageBytes.Length);
+                            if (!pageWrittenToFile)
+                            {
+                                outputStreams[bitstreamSerialNumber].Write(rawPageBytes, 0, rawPageBytes.Length);
+                                pageWrittenToFile = true;
+                            }
                         }
                         else
                         {
-                            OnExtractionFailed($"找到没有流开始页的流数据页，用于序列号: {bitstreamSerialNumber:X8}，文件: {filePath}");
-                            continue;
+                            if (_stopParsingOnFormatError)
+                            {
+                                throw new FormatException(
+                                    $"找到没有流开始页的流数据页，用于序列号: {bitstreamSerialNumber:X8}，文件: {filePath}");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"警告：对于文件 <{filePath}>，找到没有流开始页的流数据页，序列号为: {bitstreamSerialNumber:X8}。");
+                                continue;
+                            }
                         }
 
                         if ((pageType & XiphOrgOggContainer.PAGE_TYPE_END_STREAM) == XiphOrgOggContainer.PAGE_TYPE_END_STREAM)
                         {
                             if (outputStreams.ContainsKey(bitstreamSerialNumber))
                             {
+                                if (!pageWrittenToFile)
+                                {
+                                    outputStreams[bitstreamSerialNumber].Write(rawPageBytes, 0, rawPageBytes.Length);
+                                    pageWrittenToFile = true;
+                                }
+
                                 outputStreams[bitstreamSerialNumber].Close();
                                 outputStreams[bitstreamSerialNumber].Dispose();
                                 outputStreams.Remove(bitstreamSerialNumber);
                             }
                             else
                             {
-                                OnExtractionFailed($"找到没有流开始页面的流结束页面，用于序列号: {bitstreamSerialNumber:X8}，文件: {filePath}");
+                                if (_stopParsingOnFormatError)
+                                {
+                                    throw new FormatException(
+                                        $"找到没有流开始页面的流结束页面，用于序列号: {bitstreamSerialNumber:X8}，文件: {filePath}");
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"警告：对于文件 <{filePath}>，找到没有流开始页面的流结束页面，序列号为: {bitstreamSerialNumber:X8}。");
+                                }
                             }
                         }
 
@@ -148,7 +190,14 @@ namespace supertoolbox.Extractor
                 }
                 catch (Exception ex)
                 {
-                    OnExtractionFailed($"处理文件 {filePath} 时出现异常: {ex.Message}");
+                    if (_stopParsingOnFormatError)
+                    {
+                        throw;
+                    }
+                    else
+                    {
+                        OnExtractionFailed($"处理文件 {filePath} 时出现异常: {ex.Message}");
+                    }
                 }
                 finally
                 {
