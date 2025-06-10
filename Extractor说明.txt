@@ -19,5 +19,8 @@ WaveExtractor，RIFF资源交换文件格式，相同文件头和数据块的有
 WebpExtractor，RIFF资源交换文件格式，用于提取谷歌开发的webp图片
 XwmaExtractor，RIFF资源交换文件格式，用于提取微软开发的xwma音频，比较罕见的音频格式，留着吧，有备无患
 DatExtractor，Mizuchi engine开发的游戏档案dat解包脚本，广泛用于地雷社游戏，如死亡终局轮回试炼系列、
-              神狱塔断罪玛丽最终篇、新次元游戏海王星Ⅶr,大家也可以使用我的python脚本去解。
-                    
+                             神狱塔断罪玛丽最终篇、新次元游戏海王星Ⅶr,大家也可以使用我的python脚本去解。
+Kvs_Kns_Extractor   提取光荣特库摩游戏专用音频提取器，主要从switch平台提取kns和steam平台的kvs格式，也支持ps4
+                            平台的at3格式，如果发现是KTAC标识，则提示用户使用Foobar2000。
+LopusExtractor   任天堂 switch平台的音频提取器，文件头为OPUS，实际上是libopus编码的音频文件，和正常的opus
+                             不一样所以叫 lopus格式，使用此工具可以从文件中提取出lopus，也可以从假文件头的opus转换成opus格式。                
