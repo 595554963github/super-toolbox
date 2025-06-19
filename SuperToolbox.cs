@@ -245,8 +245,8 @@ namespace super_toolbox
                 case "JPEG/JPG": return new JpgExtractor();
                 case "PNG": return new PngExtractor();
                 case "CRI - HCA - hca": return new HcaExtractor();
-                case "ENDILTLE - APK -apk": return new ApkExtractor();
-                case "东方天空竞技场 - GPK -gpk": return new GpkExtractor();
+                case "ENDILTLE - APK - apk": return new ApkExtractor();
+                case "东方天空竞技场 - GPK - gpk": return new GpkExtractor();
                 case "GxArchivedFile - dat": return new DatExtractor();
                 case "苍之彼方的四重奏EXTRA2 - dat": return new Aokana2Extractor();
                 case "Lightvn galgame engine - mcdat/vndat": return new LightvnExtractor();
