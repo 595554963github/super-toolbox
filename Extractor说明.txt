@@ -26,3 +26,6 @@ LopusExtractor   任天堂 switch平台的音频提取器，文件头为OPUS，�
                              不一样所以叫 lopus格式，使用此工具可以从文件中提取出lopus，也可以从假文件头的opus转换成opus格式。
 Aokana2Extractor    苍之彼方的四重奏2 Extra的专用提取器   
 LightvnExtractor    Light.vn galgame引擎的提取器，可解《宝石少女1st》的mcdat和《爱你，我的英雄！》的vndat。  
+AfsExtractor            用于解包criware的afs格式的档案，常用于PlayStation和xbox360平台。
+CpkExtractor           用于解包criware的cpk格式的档案，各种平台都有，很常见，这玩意啥也存，音频视频图片模型...
+                                  只有你不知道的，没有他不存的。
