@@ -24,7 +24,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CriFsV2Lib" Version="2.1.2" />
+    <PackageReference Include="MaikelChan.AFSLib" Version="2.0.3" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="ByteSize">
+      <HintPath>plugins\ByteSize.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
