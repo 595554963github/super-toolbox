@@ -50,7 +50,10 @@ namespace super_toolbox
             { "东方天空竞技场 - GPK - gpk", "其他档案" },
             { "GxArchivedFile - dat", "其他档案"},
             { "苍之彼方的四重奏EXTRA2 - dat", "其他档案" },
-            { "Lightvn galgame engine - mcdat/vndat", "其他档案" }
+            { "Lightvn galgame engine - mcdat/vndat", "其他档案" },
+            { "CRI - afs archives - afs", "其他档案" },
+            { "CRI - package - cpk", "其他档案" },
+            { "IdeaFactory - tid","其他档案"}
         };
 
         public SuperToolbox()
@@ -250,6 +253,9 @@ namespace super_toolbox
                 case "GxArchivedFile - dat": return new DatExtractor();
                 case "苍之彼方的四重奏EXTRA2 - dat": return new Aokana2Extractor();
                 case "Lightvn galgame engine - mcdat/vndat": return new LightvnExtractor();
+                case "CRI - afs archives - afs": return new AfsExtractor();
+                case "CRI - package - cpk": return new CpkExtractor();
+                case "IdeaFactory - tid": return new TidExtractor();
                 default: throw new NotSupportedException($"不支持的格式: {formatName}");
             }
         }
