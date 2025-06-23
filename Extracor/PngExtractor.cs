@@ -10,12 +10,14 @@ namespace super_toolbox
     {
         private readonly object _lockObject = new object();
         private new int _extractedFileCount = 0;
+        private int _processedFiles = 0;
 
         public new event EventHandler<string>? FileExtracted;
         public event EventHandler<string>? ExtractionProgress;
         public new event EventHandler<int>? ExtractionCompleted;
 
-        private static readonly byte[] START_SEQUENCE = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        private static readonly byte[] START_SEQUENCE = { 0x89, 0x50, 0x4E, 0x47 };
+        private static readonly byte[] BLOCK_MARKER = { 0x49, 0x48, 0x44, 0x52 };
         private static readonly byte[] END_SEQUENCE = { 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82 };
 
         public override void Extract(string directoryPath)
@@ -50,6 +52,15 @@ namespace super_toolbox
 
                 try
                 {
+                    Interlocked.Increment(ref _processedFiles);
+                    ExtractionProgress?.Invoke(this, $"处理文件 {_processedFiles}/{files.Length}: {Path.GetFileName(file)}");
+
+                    if (Path.GetExtension(file).Equals(".py", StringComparison.OrdinalIgnoreCase) ||
+                        Path.GetExtension(file).Equals(".png", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
                     await ProcessFileAsync(file, extractedDir, cancellationToken);
                 }
                 catch (OperationCanceledException)
@@ -72,62 +83,126 @@ namespace super_toolbox
 
         private async Task ProcessFileAsync(string filePath, string destinationFolder, CancellationToken cancellationToken)
         {
-            byte[] content = await File.ReadAllBytesAsync(filePath, cancellationToken);
-            string fileName = Path.GetFileName(filePath);
-            string filePrefix = Path.GetFileNameWithoutExtension(fileName);
+            const int BufferSize = 8192;
+            var startSequenceLength = START_SEQUENCE.Length;
+            var endSequenceLength = END_SEQUENCE.Length;
 
-            int startIndex = 0;
-            int fileCount = 0;
+            using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, FileOptions.Asynchronous);
 
-            while ((startIndex = FindSequence(content, START_SEQUENCE, startIndex)) != -1)
+            byte[] buffer = new byte[BufferSize];
+            byte[] leftover = Array.Empty<byte>();
+            MemoryStream? currentPng = null;
+            bool foundStart = false;
+            string filePrefix = Path.GetFileNameWithoutExtension(filePath);
+
+            int bytesRead;
+            while ((bytesRead = await fileStream.ReadAsync(buffer, 0, BufferSize, cancellationToken)) > 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                int endIndex = FindSequence(content, END_SEQUENCE, startIndex);
-                if (endIndex == -1) break;
-
-                endIndex += END_SEQUENCE.Length;
-                byte[] pngData = new byte[endIndex - startIndex];
-                Array.Copy(content, startIndex, pngData, 0, pngData.Length);
-
-                if (IsValidPng(pngData))
+                byte[] currentData;
+                if (leftover.Length > 0)
                 {
-                    fileCount++;
-                    SavePngFile(pngData, destinationFolder, filePrefix, fileCount);
+                    currentData = new byte[leftover.Length + bytesRead];
+                    Array.Copy(leftover, 0, currentData, 0, leftover.Length);
+                    Array.Copy(buffer, 0, currentData, leftover.Length, bytesRead);
+                }
+                else
+                {
+                    currentData = new byte[bytesRead];
+                    Array.Copy(buffer, 0, currentData, 0, bytesRead);
                 }
 
-                startIndex = endIndex;
+                if (!foundStart)
+                {
+                    int startIndex = IndexOf(currentData, START_SEQUENCE);
+                    if (startIndex != -1)
+                    {
+                        foundStart = true;
+                        currentPng = new MemoryStream();
+                        currentPng.Write(currentData, startIndex, currentData.Length - startIndex);
+
+                        leftover = Array.Empty<byte>();
+                    }
+                    else
+                    {
+                        leftover = currentData.Length > startSequenceLength
+                            ? currentData[^(startSequenceLength - 1)..]
+                            : currentData;
+                    }
+                }
+                else
+                {
+                    currentPng!.Write(currentData, 0, currentData.Length);
+
+                    byte[] pngBytes = currentPng.ToArray();
+                    int endIndex = IndexOf(pngBytes, END_SEQUENCE);
+
+                    if (endIndex != -1)
+                    {
+                        endIndex += endSequenceLength;
+                        byte[] extractedData = new byte[endIndex];
+                        Array.Copy(pngBytes, 0, extractedData, 0, endIndex);
+
+                        if (ContainsMarker(extractedData, BLOCK_MARKER))
+                        {
+                            SavePngFile(extractedData, destinationFolder, filePrefix);
+                        }
+
+                        foundStart = false;
+                        currentPng.Dispose();
+                        currentPng = null;
+
+                        if (endIndex < pngBytes.Length)
+                        {
+                            leftover = pngBytes[endIndex..];
+                        }
+                        else
+                        {
+                            leftover = Array.Empty<byte>();
+                        }
+                    }
+                    else
+                    {
+                        leftover = Array.Empty<byte>();
+                    }
+                }
+            }
+
+            currentPng?.Dispose();
+        }
+
+        private void SavePngFile(byte[] pngData, string destinationFolder, string filePrefix)
+        {
+            lock (_lockObject)
+            {
+                int fileCount = Directory.GetFiles(destinationFolder, "*.png").Length;
+                string newFileName = $"{filePrefix}_{fileCount}.png";
+                string filePath = Path.Combine(destinationFolder, newFileName);
+
+                try
+                {
+                    File.WriteAllBytes(filePath, pngData);
+                    Interlocked.Increment(ref _extractedFileCount);
+
+                    FileExtracted?.Invoke(this, $"已提取: {newFileName}");
+                    OnFileExtracted(filePath);
+                }
+                catch (Exception ex)
+                {
+                    ExtractionProgress?.Invoke(this, $"保存文件 {newFileName} 时出错: {ex.Message}");
+                }
             }
         }
 
-        private void SavePngFile(byte[] pngData, string destinationFolder, string filePrefix, int fileCount)
+        private static int IndexOf(byte[] source, byte[] pattern)
         {
-            string newFileName = $"{filePrefix}_{fileCount}.png";
-            string filePath = Path.Combine(destinationFolder, newFileName);
-
-            try
-            {
-                File.WriteAllBytes(filePath, pngData);
-
-                int count = Interlocked.Increment(ref _extractedFileCount);
-
-                FileExtracted?.Invoke(this, $"已提取: {newFileName}");
-                OnFileExtracted(filePath);
-            }
-            catch (Exception ex)
-            {
-                ExtractionProgress?.Invoke(this, $"保存文件 {newFileName} 时出错: {ex.Message}");
-            }
-        }
-
-        private static int FindSequence(byte[] content, byte[] sequence, int startIndex)
-        {
-            for (int i = startIndex; i <= content.Length - sequence.Length; i++)
+            for (int i = 0; i <= source.Length - pattern.Length; i++)
             {
                 bool match = true;
-                for (int j = 0; j < sequence.Length; j++)
+                for (int j = 0; j < pattern.Length; j++)
                 {
-                    if (content[i + j] != sequence[j])
+                    if (source[i + j] != pattern[j])
                     {
                         match = false;
                         break;
@@ -138,16 +213,22 @@ namespace super_toolbox
             return -1;
         }
 
-        private static bool IsValidPng(byte[] data)
+        private static bool ContainsMarker(byte[] data, byte[] marker)
         {
-            if (data.Length < 8) return false;
-            
-            for (int i = 0; i < START_SEQUENCE.Length; i++)
+            for (int i = 0; i <= data.Length - marker.Length; i++)
             {
-                if (data[i] != START_SEQUENCE[i]) return false;
+                bool match = true;
+                for (int j = 0; j < marker.Length; j++)
+                {
+                    if (data[i + j] != marker[j])
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return true;
             }
-            
-            return true;
+            return false;
         }
     }
-}    
+}
