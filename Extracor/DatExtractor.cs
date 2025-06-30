@@ -1,4 +1,4 @@
-﻿using super_toolbox;
+using super_toolbox;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -22,6 +22,12 @@ namespace super_toolbox
             { Encoding.ASCII.GetBytes("kpm"), "mpk" },
             { Encoding.ASCII.GetBytes("pim"), "mip" },
             { Encoding.ASCII.GetBytes("dsc"), "csd" },
+            { Encoding.ASCII.GetBytes("psb"), "bsp" },
+            { Encoding.ASCII.GetBytes("vsb"), "bsv" },
+            { Encoding.ASCII.GetBytes("spk"), "kps" },
+            { Encoding.ASCII.GetBytes("tid"), "dit" },
+            { Encoding.ASCII.GetBytes("dat"), "tad" },
+            { Encoding.ASCII.GetBytes("enc"), "cne" },
             { Encoding.ASCII.GetBytes("nibg"), "gbin" },
             { Encoding.ASCII.GetBytes("rtsg"), "gstr" },
             { Encoding.ASCII.GetBytes("qstm"), "mtsq" },
