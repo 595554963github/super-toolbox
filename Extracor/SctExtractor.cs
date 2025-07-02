@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
@@ -26,27 +26,35 @@ namespace super_toolbox
                .Where(file => !file.StartsWith(extractedDir, StringComparison.OrdinalIgnoreCase))
                .ToList();
 
-            var extractedFiles = new ConcurrentBag<string>();
+            var successfulExtractions = new ConcurrentBag<string>();
+            var failedFiles = new ConcurrentBag<string>();
 
             try
             {
                 await Task.Run(() =>
                 {
-                    Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount * 2 }, filePath =>
+                    Parallel.ForEach(files, new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = Environment.ProcessorCount * 2,
+                        CancellationToken = cancellationToken
+                    }, filePath =>
                     {
                         try
                         {
-                            if (cancellationToken.IsCancellationRequested)
-                                return;
+                            cancellationToken.ThrowIfCancellationRequested();
 
                             string outputPath = Path.Combine(extractedDir, $"{Path.GetFileNameWithoutExtension(filePath)}.png");
                             ConvertSctToPng(filePath, outputPath);
-                            extractedFiles.Add(outputPath);
-                            Interlocked.Increment(ref _extractedFileCount);
+                            successfulExtractions.Add(outputPath);
                             OnFileExtracted(outputPath);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
                         }
                         catch (Exception ex)
                         {
+                            failedFiles.Add(filePath);
                             Console.WriteLine($"提取失败: {filePath} - {ex.Message}");
                         }
                     });
@@ -59,12 +67,25 @@ namespace super_toolbox
 
             sw.Stop();
 
-            int actualExtractedCount = Directory.EnumerateFiles(extractedDir, "*.png", SearchOption.AllDirectories).Count();
+            _extractedFileCount = successfulExtractions.Count;
+
             Console.WriteLine($"处理完成，耗时 {sw.Elapsed.TotalSeconds:F2} 秒");
-            Console.WriteLine($"共提取出 {actualExtractedCount} 个PNG文件，统计提取文件数量: {ExtractedFileCount}");
-            if (ExtractedFileCount != actualExtractedCount)
+            Console.WriteLine($"共找到 {files.Count} 个SCT文件");
+            Console.WriteLine($"成功提取 {_extractedFileCount} 个PNG文件");
+            Console.WriteLine($"失败 {failedFiles.Count} 个文件");
+
+            if (failedFiles.Count > 0)
             {
-                Console.WriteLine("警告: 统计数量与实际数量不符，可能存在文件操作异常。");
+                Console.WriteLine("\n失败文件列表:");
+                foreach (var file in failedFiles)
+                {
+                    Console.WriteLine(file);
+                }
+            }
+
+            if (_extractedFileCount != files.Count - failedFiles.Count)
+            {
+                Console.WriteLine("警告: 统计数量与实际文件数量存在差异");
             }
         }
 
