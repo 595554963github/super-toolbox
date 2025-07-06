@@ -42,10 +42,10 @@ namespace super_toolbox
             { "Xiph.Org - Ogg", "音频" },
             { "CRI - HCA - hca", "音频" },
             { "任天堂 - libopus - lopus", "音频" },
-            { "光荣特库摩 - sound", "音频" },
+            { "光荣特库摩 - kvs/ktss", "音频" },
             { "RIFF - Google - webp", "图片" },
-            { "JPEG/JPG", "图片" },
-            { "PNG", "图片" },
+            { "联合图像专家组 -JPEG/JPG", "图片" },
+            { "便携式网络图形 - PNG", "图片" },
             { "ENDILTLE - APK - apk", "其他档案" },
             { "东方天空竞技场 - GPK - gpk", "其他档案" },
             { "GxArchivedFile - dat", "其他档案"},
@@ -53,9 +53,10 @@ namespace super_toolbox
             { "Lightvn galgame engine - mcdat/vndat", "其他档案" },
             { "CRI - afs archives - afs", "其他档案" },
             { "CRI - package - cpk", "其他档案" },
-            { "IdeaFactory - tid","其他档案"},
-            { "第七史诗 - sct","其他档案" },
-            { "情热传说 - bnsf","其他档案" }//情热传说，英文名<Tales of Zestiria>
+            { "IdeaFactory - tid","图片"},
+            { "第七史诗 - sct","图片" },
+            { "万代南梦宫 - bnsf","音频" },//代表作：情热传说，英文名<Tales of Zestiria>
+            { "索尼 - gxt","图片" }
         };
 
         public SuperToolbox()
@@ -245,10 +246,10 @@ namespace super_toolbox
                 case "CRI - adpcm_adx - ahx": return new AhxExtractor();
                 case "Fmod - fsb5": return new Fsb5Extractor();
                 case "任天堂 - libopus - lopus": return new LopusExtractor();
-                case "光荣特库摩 - sound": return new Kvs_Kns_Extractor();
+                case "光荣特库摩 - kvs/ktss": return new Kvs_Kns_Extractor();
                 case "Xiph.Org - Ogg": return new OggExtractor();
-                case "JPEG/JPG": return new JpgExtractor();
-                case "PNG": return new PngExtractor();
+                case "联合图像专家组 - JPEG/JPG": return new JpgExtractor();
+                case "便携式网络图形 - PNG": return new PngExtractor();
                 case "CRI - HCA - hca": return new HcaExtractor();
                 case "ENDILTLE - APK - apk": return new ApkExtractor();
                 case "东方天空竞技场 - GPK - gpk": return new GpkExtractor();
@@ -259,7 +260,8 @@ namespace super_toolbox
                 case "CRI - package - cpk": return new CpkExtractor();
                 case "IdeaFactory - tid": return new TidExtractor();
                 case "第七史诗 - sct": return new SctExtractor();
-                case "情热传说 - bnsf": return new Bnsf_Extractor();
+                case "万代南梦宫 - bnsf": return new Bnsf_Extractor();
+                case "索尼 - gxt": return new SonyGxtExtractor();
                 default: throw new NotSupportedException($"不支持的格式: {formatName}");
             }
         }
