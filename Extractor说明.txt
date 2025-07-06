@@ -22,8 +22,8 @@ DatExtractor，Mizuchi engine开发的游戏档案dat解包脚本，广泛用于
                              神狱塔断罪玛丽最终篇、新次元游戏海王星Ⅶr,大家也可以使用我的python脚本去解。
 Kvs_Kns_Extractor   提取光荣特库摩游戏专用音频提取器，主要从switch平台提取kns和steam平台的kvs格式，也支持ps4
                             平台的at3格式，如果发现是KTAC标识，则提示用户使用Foobar2000。
-LopusExtractor   任天堂 switch平台的音频提取器，文件头为OPUS，实际上是libopus编码的音频文件，和正常的opus
-                             不一样所以叫 lopus格式，使用此工具可以从文件中提取出lopus，也可以从假文件头的opus转换成opus格式。
+LopusExtractor   任天堂switch平台的音频提取器，文件头为OPUS，实际上是libopus编码的音频文件，和正常的opus
+                             不一样所以叫lopus格式，使用此工具可以从文件中提取出lopus，也可以从假文件头的opus转换成opus格式。
 Aokana2Extractor    苍之彼方的四重奏2 Extra的专用提取器   
 LightvnExtractor    Light.vn galgame引擎的提取器，可解《宝石少女1st》的mcdat和《爱你，我的英雄！》的vndat。  
 AfsExtractor            用于解包criware的afs格式的档案，常用于PlayStation和xbox360平台。
@@ -31,4 +31,5 @@ CpkExtractor           用于解包criware的cpk格式的档案，各种平台�
                                   只有你不知道的，没有他不存的。
 TidExtractor        地雷社海王星系列pac文件经常存储这种tid文件，使用此提取器可以把tid转换到dds，并且支持BC7纹理的tid
 SctExtractor        第七史诗的sct解包工具，从data.pack文件里面提取出来的sct文件可以使用此提取器转换为png
-BNSF_Extractor       情热传说的bnsf音频提取器，从TLFILE.TLDAT文件里面提取，只对情热传说有效，狂热传说无效
+Bnsf_Extractor   万代南梦宫的bnsf音频提取器，从TLFILE.TLDAT文件里面提取，可解情热传说和ps3平台的狂战传说，后者steam版因加密无法提取。
+SonyGxtExtractor  从索尼的psv、psp等平台游戏里面提取gxt文件，很多游戏喜欢把一堆gxt文件打包到一个个包文件里。
