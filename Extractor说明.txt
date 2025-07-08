@@ -33,3 +33,6 @@ TidExtractor        地雷社海王星系列pac文件经常存储这种tid文件
 SctExtractor        第七史诗的sct解包工具，从data.pack文件里面提取出来的sct文件可以使用此提取器转换为png
 Bnsf_Extractor   万代南梦宫的bnsf音频提取器，从TLFILE.TLDAT文件里面提取，可解情热传说和ps3平台的狂战传说，后者steam版因加密无法提取。
 SonyGxtExtractor  从索尼的psv、psp等平台游戏里面提取gxt文件，很多游戏喜欢把一堆gxt文件打包到一个个包文件里。
+DdsExtracor       从游戏文件里面提取dds图片的提取器，亲测战场女武神4，一般的dds和DX10纹理的dds都可以提取出来。
+StingPckExtracor     用于解包IdeaFactory游戏的pck档案，如ps3的约会大作战、steam和switch平台的超女神信仰诺瓦露
+StingTexExtracor     用于解包IdeaFactory游戏的tex档案，如ps3的约会大作战、steam和switch平台的超女神信仰诺瓦露
