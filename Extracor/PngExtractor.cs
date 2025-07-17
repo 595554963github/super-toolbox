@@ -55,8 +55,7 @@ namespace super_toolbox
                     Interlocked.Increment(ref _processedFiles);
                     ExtractionProgress?.Invoke(this, $"处理文件 {_processedFiles}/{files.Length}: {Path.GetFileName(file)}");
 
-                    if (Path.GetExtension(file).Equals(".py", StringComparison.OrdinalIgnoreCase) ||
-                        Path.GetExtension(file).Equals(".png", StringComparison.OrdinalIgnoreCase))
+                    if (Path.GetExtension(file).Equals(".png", StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
                     }
