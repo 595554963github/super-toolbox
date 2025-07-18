@@ -36,3 +36,7 @@ SonyGxtExtractor  从索尼的psv、psp等平台游戏里面提取gxt文件，�
 DdsExtracor       从游戏文件里面提取dds图片的提取器，亲测战场女武神4，一般的dds和DX10纹理的dds都可以提取出来。
 StingPckExtracor     用于解包IdeaFactory游戏的pck档案，如ps3的约会大作战、steam和switch平台的超女神信仰诺瓦露
 StingTexExtracor     用于解包IdeaFactory游戏的tex档案，如ps3的约会大作战、steam和switch平台的超女神信仰诺瓦露
+DataDatExtractor   ps3游戏断罪的玛利亚专用提取器，可解包data.dat文件，提取出里面的视频、音频和图片。
+FPAC_Extractor     FARC档案解包工具，代表作有苍翼默示录：刻之幻影，从bin文件里提取出pac文件可以用此提取器提取音频和图片。
+SEGS_BinExtractor   苍翼默示录：刻之幻影的bin文件解包工具，可提取出里面的所有pac文件。
+VagExtractor       以二进制模式从索尼的游戏文件里面提取vag音频文件，vag是PlayStation 4 bit ADPCM编码的音频格式。
