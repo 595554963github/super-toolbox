@@ -170,6 +170,8 @@ namespace super_toolbox
 
         private void ProcessResourceFiles(List<string> allFiles, BlockingCollection<string> outputQueue)
         {
+            const int OVERLAP_SIZE = 32;
+
             var resourceFiles = allFiles.Where(f => f.EndsWith(".resource", StringComparison.OrdinalIgnoreCase)).ToList();
             outputQueue.Add($"找到 {resourceFiles.Count} 个RESOURCE文件");
 
@@ -177,49 +179,85 @@ namespace super_toolbox
             {
                 try
                 {
-                    if (!File.Exists(resourceFile))
+                    var magicPositions = new List<long>();
+                    var buffer = new byte[BUFFER_SIZE];
+                    var prevBuffer = new byte[OVERLAP_SIZE];
+                    long filePosition = 0;
+                    bool hasMoreData = true;
+
+                    using (var fs = new FileStream(resourceFile, FileMode.Open, FileAccess.Read))
                     {
-                        outputQueue.Add($"文件不存在: {Path.GetFileName(resourceFile)}");
-                        return;
-                    }
-
-                    string directoryPath = Path.GetDirectoryName(resourceFile) ?? Directory.GetCurrentDirectory();
-                    string outputDir = Path.Combine(directoryPath, "Extracted");
-                    Directory.CreateDirectory(outputDir);
-                    string baseName = Path.GetFileNameWithoutExtension(resourceFile) ?? "unknown_resource";
-
-                    int count = 0;
-
-                    using (var fs = new FileStream(resourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, BUFFER_SIZE, FileOptions.SequentialScan))
-                    {
-                        byte[] buffer = new byte[BUFFER_SIZE];
-                        long filePosition = 0;
-                        int bytesRead;
-
-                        while ((bytesRead = fs.Read(buffer, 0, buffer.Length)) > 0)
+                        while (hasMoreData)
                         {
-                            for (int i = 0; i < bytesRead - FSB5_MAGIC.Length; i++)
+                            int bytesRead = fs.Read(buffer, 0, BUFFER_SIZE);
+                            if (bytesRead < BUFFER_SIZE) hasMoreData = false;
+
+                            for (int i = 0; i <= bytesRead - FSB5_MAGIC.Length; i++)
                             {
                                 if (CheckMagicMatch(buffer, i))
                                 {
-                                    long startPos = filePosition + i;
-                                    long endPos = FindNextFsbPosition(fs, startPos + FSB5_MAGIC.Length);
-
-                                    if (endPos == -1)
-                                    {
-                                        endPos = fs.Length;
-                                    }
-
-                                    ExtractFsbChunk(fs, startPos, endPos, outputDir, baseName, ref count, outputQueue);
+                                    magicPositions.Add(filePosition + i);
                                 }
                             }
+
+                            if (filePosition > 0)
+                            {
+                                var combinedBuffer = new byte[OVERLAP_SIZE * 2];
+                                Buffer.BlockCopy(prevBuffer, 0, combinedBuffer, 0, OVERLAP_SIZE);
+                                Buffer.BlockCopy(buffer, 0, combinedBuffer, OVERLAP_SIZE, OVERLAP_SIZE);
+
+                                for (int i = 0; i <= OVERLAP_SIZE; i++)
+                                {
+                                    if (CheckMagicMatch(combinedBuffer, i))
+                                    {
+                                        long pos = filePosition - OVERLAP_SIZE + i;
+                                        if (!magicPositions.Contains(pos))
+                                            magicPositions.Add(pos);
+                                    }
+                                }
+                            }
+
+                            Buffer.BlockCopy(buffer, bytesRead - OVERLAP_SIZE, prevBuffer, 0, OVERLAP_SIZE);
                             filePosition += bytesRead;
                         }
                     }
 
-                    if (count == 0)
+                    if (magicPositions.Count == 0)
                     {
                         outputQueue.Add($"跳过 {Path.GetFileName(resourceFile)}：未找到FSB5标记");
+                        return;
+                    }
+
+                    string resourceDir = Path.GetDirectoryName(resourceFile) ?? string.Empty;
+                    string outputDir = Path.Combine(resourceDir, "Extracted");
+                    Directory.CreateDirectory(outputDir);
+                    string baseName = Path.GetFileNameWithoutExtension(resourceFile);
+
+                    using (var fs = new FileStream(resourceFile, FileMode.Open))
+                    {
+                        for (int i = 0; i < magicPositions.Count; i++)
+                        {
+                            long startPos = magicPositions[i];
+                            long endPos = (i < magicPositions.Count - 1) ? magicPositions[i + 1] : new FileInfo(resourceFile).Length;
+                            long size = endPos - startPos;
+
+                            fs.Position = startPos;
+                            byte[] fsbData = new byte[size];
+                            int totalRead = 0;
+
+                            while (totalRead < size)
+                            {
+                                int bytesRead = fs.Read(fsbData, totalRead, (int)Math.Min(BUFFER_SIZE, size - totalRead));
+                                if (bytesRead == 0) break;
+                                totalRead += bytesRead;
+                            }
+
+                            string outputPath = Path.Combine(outputDir, $"{baseName}_{i}.fsb");
+                            File.WriteAllBytes(outputPath, fsbData);
+
+                            outputQueue.Add($"已提取: {Path.GetFileName(outputPath)} (大小: {fsbData.Length}字节)");
+                            OnFileExtracted(outputPath);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -228,55 +266,6 @@ namespace super_toolbox
                     OnExtractionFailed($"处理 {Path.GetFileName(resourceFile)} 时出错: {ex.Message}");
                 }
             });
-        }
-
-        private long FindNextFsbPosition(FileStream fs, long startPos)
-        {
-            byte[] buffer = new byte[BUFFER_SIZE];
-            fs.Position = startPos;
-            int bytesRead;
-
-            while ((bytesRead = fs.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                for (int i = 0; i < bytesRead - FSB5_MAGIC.Length; i++)
-                {
-                    if (CheckMagicMatch(buffer, i))
-                    {
-                        return fs.Position - bytesRead + i;
-                    }
-                }
-            }
-            return -1;
-        }
-
-        private void ExtractFsbChunk(FileStream fs, long startPos, long endPos, string outputDir, string baseName, ref int count, BlockingCollection<string> outputQueue)
-        {
-            try
-            {
-                long size = endPos - startPos;
-                if (size <= 0) return;
-
-                fs.Position = startPos;
-                byte[] fsbData = new byte[size];
-                int totalRead = 0;
-
-                while (totalRead < size)
-                {
-                    int bytesRead = fs.Read(fsbData, totalRead, (int)Math.Min(BUFFER_SIZE, size - totalRead));
-                    if (bytesRead == 0) break;
-                    totalRead += bytesRead;
-                }
-
-                string outputPath = Path.Combine(outputDir, $"{baseName}_{count++}.fsb");
-                File.WriteAllBytes(outputPath, fsbData);
-
-                outputQueue.Add($"已提取: {Path.GetFileName(outputPath)} (大小: {fsbData.Length} 字节)");
-                OnFileExtracted(outputPath);
-            }
-            catch (Exception ex)
-            {
-                outputQueue.Add($"提取FSB块时出错: {ex.Message}");
-            }
         }
 
         private void ProcessNormalFiles(List<string> allFiles, BlockingCollection<string> outputQueue)
