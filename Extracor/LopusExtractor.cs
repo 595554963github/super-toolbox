@@ -1,6 +1,8 @@
-﻿using System;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -8,276 +10,210 @@ namespace super_toolbox
 {
     public class LopusExtractor : BaseExtractor
     {
-        public event EventHandler<List<string>>? FilesExtracted;
-        public event EventHandler<string>? ExtractionStarted;
-        public event EventHandler<string>? ExtractionProgress;
-        public new event EventHandler<string>? ExtractionCompleted;
-
-        private static readonly byte[] OPUS_HEADER = { 0x4F, 0x50, 0x55, 0x53, 0x00, 0x00, 0x00, 0x00 };
+        private static readonly byte[] OPUS_HEADER = { 0x4F, 0x50, 0x55, 0x53 };
         private static readonly byte[] LOPUS_HEADER = { 0x01, 0x00, 0x00, 0x80, 0x18, 0x00, 0x00, 0x00 };
 
-        private static int IndexOf(byte[] data, byte[] pattern, int startIndex)
+        private readonly BlockingCollection<string> _outputQueue = new BlockingCollection<string>();
+        private Thread? _outputThread;
+
+        public override async Task ExtractAsync(string directoryPath, CancellationToken cancellationToken = default)
         {
-            for (int i = startIndex; i <= data.Length - pattern.Length; i++)
-            {
-                bool found = true;
-                for (int j = 0; j < pattern.Length; j++)
-                {
-                    if (data[i + j] != pattern[j])
-                    {
-                        found = false;
-                        break;
-                    }
-                }
-                if (found)
-                {
-                    return i;
-                }
-            }
-            return -1;
-        }
-
-        private static List<int> FindOpusPositions(byte[] content)
-        {
-            List<int> positions = new List<int>();
-            int offset = 0;
-            while (true)
-            {
-                offset = IndexOf(content, OPUS_HEADER, offset);
-                if (offset == -1)
-                {
-                    break;
-                }
-                positions.Add(offset);
-                offset++;
-            }
-            return positions;
-        }
-
-        private static int FindLopusHeader(byte[] content)
-        {
-            return IndexOf(content, LOPUS_HEADER, 0);
-        }
-
-        private bool DecryptOpusFile(string file_path)
-        {
-            try
-            {
-                byte[] content = File.ReadAllBytes(file_path);
-                int lopus_pos = FindLopusHeader(content);
-                if (lopus_pos == -1)
-                {
-                    OnExtractionFailed($"警告: {file_path} 中未找到lopus头");
-                    return false;
-                }
-
-                byte[] newContent = new byte[content.Length - lopus_pos];
-                Array.Copy(content, lopus_pos, newContent, 0, newContent.Length);
-                File.WriteAllBytes(file_path, newContent);
-
-                string lopus_file = Path.ChangeExtension(file_path, ".lopus");
-                File.Move(file_path, lopus_file);
-                ExtractionProgress?.Invoke(this, $"已处理并保存为: {lopus_file}");
-                // 移除了 OnFileExtracted 调用，避免重复计数
-
-                return true;
-            }
-            catch (Exception e)
-            {
-                OnExtractionFailed($"处理文件 {file_path} 时出错: {e.Message}");
-                return false;
-            }
-        }
-
-        private void ExtractOpusFiles(string file_path, string output_dir)
-        {
-            try
-            {
-                byte[] content = File.ReadAllBytes(file_path);
-                List<int> opus_positions = FindOpusPositions(content);
-                if (opus_positions.Count == 0)
-                {
-                    OnExtractionFailed($"{file_path} 中未找到OPUS标记");
-                    return;
-                }
-
-                string base_name = Path.GetFileNameWithoutExtension(file_path);
-
-                for (int i = 0; i < opus_positions.Count; i++)
-                {
-                    int pos = opus_positions[i];
-                    int end_pos = content.Length;
-                    if (i < opus_positions.Count - 1)
-                    {
-                        end_pos = opus_positions[i + 1];
-                    }
-
-                    byte[] extracted_data = new byte[end_pos - pos];
-                    Array.Copy(content, pos, extracted_data, 0, extracted_data.Length);
-                    string output_file = Path.Combine(output_dir, $"{base_name}_{i}.opus");
-
-                    try
-                    {
-                        File.WriteAllBytes(output_file, extracted_data);
-                        ExtractionProgress?.Invoke(this, $"已提取: {output_file}");
-                        OnFileExtracted(output_file);
-
-                        DecryptOpusFile(output_file);
-                    }
-                    catch (IOException e)
-                    {
-                        OnExtractionFailed($"无法写入文件 {output_file}: {e.Message}");
-                    }
-                }
-            }
-            catch (IOException e)
-            {
-                OnExtractionFailed($"无法读取文件 {file_path}: {e.Message}");
-            }
-        }
-
-        private void ProcessPureOpusDirectory(string directory_path)
-        {
-            ExtractionProgress?.Invoke(this, $"检测到纯OPUS目录，直接处理所有OPUS文件...");
-            string[] opusFiles = Directory.GetFiles(directory_path, "*.opus", SearchOption.AllDirectories);
-            foreach (string file in opusFiles)
-            {
-                ExtractionProgress?.Invoke(this, $"\n处理OPUS文件: {file}");
-                DecryptOpusFile(file);
-            }
+            await Task.Run(() => Extract(directoryPath), cancellationToken);
         }
 
         public override void Extract(string directoryPath)
         {
-            List<string> extractedFiles = new List<string>();
-
             if (!Directory.Exists(directoryPath))
             {
-                OnExtractionFailed($"源文件夹 {directoryPath} 不存在");
+                OnExtractionFailed($"目录 {directoryPath} 不存在");
                 return;
             }
 
-            ExtractionStarted?.Invoke(this, $"开始处理目录: {directoryPath}");
+            StartOutputThread();
 
-            var filePaths = Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories);
-            int totalFiles = 0;
-
-            foreach (var _ in filePaths) totalFiles++;
-
-            TotalFilesToExtract = totalFiles;
-
-            int opusFiles = 0;
-            int nonOpusFiles = 0;
-            foreach (var filePath in filePaths)
+            try
             {
-                if (Path.GetExtension(filePath).Equals(".opus", StringComparison.OrdinalIgnoreCase))
+                var allFiles = Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories)
+                    .Where(f => !Path.GetFileName(f).Equals("Extracted", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                TotalFilesToExtract = allFiles.Count;
+                LogMessage($"找到 {allFiles.Count} 个文件待处理");
+
+                ProcessFiles(allFiles, directoryPath);
+            }
+            catch (Exception ex)
+            {
+                OnExtractionFailed($"处理目录时出错: {ex.Message}");
+            }
+            finally
+            {
+                CompleteProcessing();
+            }
+        }
+
+        private void ProcessFiles(List<string> files, string baseDir)
+        {
+            var outputDir = Path.Combine(baseDir, "Extracted");
+            Directory.CreateDirectory(outputDir);
+
+            Parallel.ForEach(files, file =>
+            {
+                try
                 {
-                    opusFiles++;
+                    if (IsOpusFile(file))
+                        ProcessOpusFile(file, outputDir);
+                    else
+                        ProcessOtherFile(file, outputDir);
                 }
-                else if (!Path.GetFileName(filePath).Equals("Extracted"))
+                catch (Exception ex)
                 {
-                    nonOpusFiles++;
+                    LogError($"处理文件 {file} 时出错: {ex.Message}");
                 }
+            });
+        }
+
+        private void ProcessOpusFile(string filePath, string outputDir)
+        {
+            var content = File.ReadAllBytes(filePath);
+
+            if (!IsValidOpus(content))
+            {
+                LogMessage($"文件 {Path.GetFileName(filePath)} 不是有效的OPUS文件");
+                return;
             }
 
-            if (nonOpusFiles == 0 && opusFiles > 0)
+            if (TryExtractLopusData(content, out var lopusData) && lopusData != null)
             {
-                ProcessPureOpusDirectory(directoryPath);
+                SaveLopusFile(lopusData, Path.GetFileNameWithoutExtension(filePath), outputDir);
             }
             else
             {
-                string output_dir = Path.Combine(directoryPath, "Extracted");
-                Directory.CreateDirectory(output_dir);
-                ExtractionProgress?.Invoke(this, $"输出目录: {output_dir}");
-
-                foreach (var filePath in filePaths)
-                {
-                    if (!Path.GetFileName(filePath).Equals("Extracted"))
-                    {
-                        ExtractionProgress?.Invoke(this, $"正在处理文件: {Path.GetFileName(filePath)}");
-                        ExtractOpusFiles(filePath, output_dir);
-                    }
-                }
+                LogMessage($"警告: {Path.GetFileName(filePath)} 未找到LOPUS头，跳过处理");
             }
-
-            FilesExtracted?.Invoke(this, extractedFiles);
-            ExtractionCompleted?.Invoke(this, $"处理完成，共提取出 {ExtractedFileCount} 个符合条件的文件片段");
-            OnExtractionCompleted();
         }
 
-        public override async Task ExtractAsync(string directoryPath, CancellationToken cancellationToken = default)
+        private void ProcessOtherFile(string filePath, string outputDir)
         {
-            await Task.Run(() =>
+            var content = File.ReadAllBytes(filePath);
+            var opusSegments = FindOpusSegments(content);
+
+            if (!opusSegments.Any())
+                return;
+
+            var baseName = Path.GetFileNameWithoutExtension(filePath);
+            LogMessage($"在 {baseName} 中发现 {opusSegments.Count} 个OPUS片段");
+
+            for (int i = 0; i < opusSegments.Count; i++)
             {
-                List<string> extractedFiles = new List<string>();
-
-                if (!Directory.Exists(directoryPath))
+                if (TryExtractLopusData(opusSegments[i], out var lopusData) && lopusData != null)
                 {
-                    OnExtractionFailed($"源文件夹 {directoryPath} 不存在");
-                    return;
-                }
-
-                ExtractionStarted?.Invoke(this, $"开始处理目录: {directoryPath}");
-
-                var filePaths = Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories);
-                int totalFiles = 0;
-
-                foreach (var _ in filePaths) totalFiles++;
-
-                TotalFilesToExtract = totalFiles;
-
-                int opusFiles = 0;
-                int nonOpusFiles = 0;
-                foreach (var filePath in filePaths)
-                {
-                    if (Path.GetExtension(filePath).Equals(".opus", StringComparison.OrdinalIgnoreCase))
-                    {
-                        opusFiles++;
-                    }
-                    else if (!Path.GetFileName(filePath).Equals("Extracted"))
-                    {
-                        nonOpusFiles++;
-                    }
-                }
-
-                if (nonOpusFiles == 0 && opusFiles > 0)
-                {
-                    ProcessPureOpusDirectory(directoryPath);
+                    SaveLopusFile(lopusData, $"{baseName}_{i}", outputDir);
                 }
                 else
                 {
-                    string output_dir = Path.Combine(directoryPath, "Extracted");
-                    Directory.CreateDirectory(output_dir);
-                    ExtractionProgress?.Invoke(this, $"输出目录: {output_dir}");
-
-                    foreach (var filePath in filePaths)
-                    {
-                        ThrowIfCancellationRequested(cancellationToken);
-
-                        if (!Path.GetFileName(filePath).Equals("Extracted"))
-                        {
-                            ExtractionProgress?.Invoke(this, $"正在处理文件: {Path.GetFileName(filePath)}");
-                            try
-                            {
-                                ExtractOpusFiles(filePath, output_dir);
-                            }
-                            catch (OperationCanceledException)
-                            {
-                                OnExtractionFailed("提取操作已取消");
-                                throw;
-                            }
-                            catch (Exception e)
-                            {
-                                OnExtractionFailed($"处理文件 {filePath} 时出错: {e.Message}");
-                            }
-                        }
-                    }
+                    LogMessage($"警告: {baseName}_{i} 未找到LOPUS头，跳过处理");
                 }
-
-                FilesExtracted?.Invoke(this, extractedFiles);
-                ExtractionCompleted?.Invoke(this, $"处理完成，共提取出 {ExtractedFileCount} 个符合条件的文件片段");
-                OnExtractionCompleted();
-            }, cancellationToken);
+            }
         }
+
+        private bool TryExtractLopusData(byte[] opusData, out byte[]? lopusData)
+        {
+            lopusData = null;
+            int pos = FindHeaderPosition(opusData, LOPUS_HEADER, 0);
+
+            if (pos == -1) return false;
+
+            lopusData = new byte[opusData.Length - pos];
+            Array.Copy(opusData, pos, lopusData, 0, lopusData.Length);
+            return true;
+        }
+
+        private List<byte[]> FindOpusSegments(byte[] data)
+        {
+            var segments = new List<byte[]>();
+            var positions = FindAllHeaderPositions(data, OPUS_HEADER);
+
+            for (int i = 0; i < positions.Count; i++)
+            {
+                int start = positions[i];
+                int end = (i < positions.Count - 1) ? positions[i + 1] : data.Length;
+
+                var segment = new byte[end - start];
+                Array.Copy(data, start, segment, 0, segment.Length);
+                segments.Add(segment);
+            }
+
+            return segments;
+        }
+
+        private void SaveLopusFile(byte[] data, string baseName, string outputDir)
+        {
+            string path = Path.Combine(outputDir, $"{baseName}.lopus");
+            File.WriteAllBytes(path, data);
+            OnFileExtracted(path);
+            LogMessage($"已提取: {Path.GetFileName(path)} (大小: {data.Length}字节)");
+        }
+
+        #region Helper Methods
+        private bool IsOpusFile(string filePath) =>
+            Path.GetExtension(filePath).Equals(".opus", StringComparison.OrdinalIgnoreCase);
+
+        private bool IsValidOpus(byte[] data) =>
+            data.Length >= OPUS_HEADER.Length && CheckHeader(data, 0, OPUS_HEADER);
+
+        private List<int> FindAllHeaderPositions(byte[] data, byte[] header)
+        {
+            var positions = new List<int>();
+            for (int offset = 0; ; offset += header.Length)
+            {
+                offset = FindHeaderPosition(data, header, offset);
+                if (offset == -1) break;
+                positions.Add(offset);
+            }
+            return positions;
+        }
+
+        private int FindHeaderPosition(byte[] data, byte[] header, int startIndex)
+        {
+            int endIndex = data.Length - header.Length;
+            for (int i = startIndex; i <= endIndex; i++)
+                if (CheckHeader(data, i, header))
+                    return i;
+            return -1;
+        }
+
+        private bool CheckHeader(byte[] data, int startIndex, byte[] header)
+        {
+            for (int j = 0; j < header.Length; j++)
+                if (data[startIndex + j] != header[j])
+                    return false;
+            return true;
+        }
+        #endregion
+
+        #region Output Management
+        private void StartOutputThread()
+        {
+            _outputThread = new Thread(ProcessOutputQueue) { IsBackground = true };
+            _outputThread.Start();
+        }
+
+        private void CompleteProcessing()
+        {
+            _outputQueue.CompleteAdding();
+            _outputThread?.Join(1000);
+            OnExtractionCompleted();
+        }
+
+        private void ProcessOutputQueue()
+        {
+            foreach (var message in _outputQueue.GetConsumingEnumerable())
+                Console.WriteLine(message);
+        }
+
+        private void LogMessage(string message) => _outputQueue.Add(message);
+        private void LogError(string message) => _outputQueue.Add(message);
+        #endregion
     }
 }
