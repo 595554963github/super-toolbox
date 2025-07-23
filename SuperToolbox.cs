@@ -44,8 +44,9 @@ namespace super_toolbox
             { "任天堂 - libopus - lopus", "音频" },
             { "光荣特库摩 - kvs/ktss", "音频" },
             { "RIFF - Google - webp", "图片" },
-            { "联合图像专家组 -JPEG/JPG", "图片" },
+            { "联合图像专家组 - JPEG/JPG", "图片" },
             { "便携式网络图形 - PNG", "图片" },
+            { "索尼 - gxt转换器", "图片" },
             { "ENDILTLE - APK - apk", "其他档案" },
             { "东方天空竞技场 - GPK - gpk", "其他档案" },
             { "GxArchivedFile - dat", "其他档案"},
@@ -56,7 +57,19 @@ namespace super_toolbox
             { "IdeaFactory - tid","图片"},
             { "第七史诗 - sct","图片" },
             { "万代南梦宫 - bnsf","音频" },//代表作：情热传说，英文名<Tales of Zestiria>
-            { "索尼 - gxt","图片" }
+            { "索尼 - gxt提取器","图片" },
+            { "直接绘制表面 - DDS", "图片" },
+            { "IdeaFactory - pck","其他档案"},
+            { "IdeaFactory - tex","图片"},
+            { "SEGS binary data - bin","其他档案"}, //代表作：苍翼默示录_刻之幻影
+            { "FPAC archives - pac","其他档案"},
+            { "断罪的玛利亚 - dat", "其他档案"},
+            { "进击的巨人_自由之翼 - bin", "其他档案"},
+            { "PlayStation 4 bit ADPCM - vag", "音频" },
+            { "零：濡鸦之巫女 - fmsg", "其他档案"},
+            { "零：濡鸦之巫女 - kscl", "图片"},
+            {"女神异闻录5对决：幽灵先锋 - bin", "其他档案" },
+            {"MPEG-4 - mp4", "其他档案" }
         };
 
         public SuperToolbox()
@@ -253,7 +266,7 @@ namespace super_toolbox
                 case "CRI - HCA - hca": return new HcaExtractor();
                 case "ENDILTLE - APK - apk": return new ApkExtractor();
                 case "东方天空竞技场 - GPK - gpk": return new GpkExtractor();
-                case "GxArchivedFile - dat": return new DatExtractor();
+                case "GxArchivedFile - dat": return new GDAT_Extractor();
                 case "苍之彼方的四重奏EXTRA2 - dat": return new Aokana2Extractor();
                 case "Lightvn galgame engine - mcdat/vndat": return new LightvnExtractor();
                 case "CRI - afs archives - afs": return new AfsExtractor();
@@ -261,7 +274,20 @@ namespace super_toolbox
                 case "IdeaFactory - tid": return new TidExtractor();
                 case "第七史诗 - sct": return new SctExtractor();
                 case "万代南梦宫 - bnsf": return new Bnsf_Extractor();
-                case "索尼 - gxt": return new SonyGxtExtractor();
+                case "索尼 - gxt提取器": return new SonyGxtExtractor();
+                case "直接绘制表面 - DDS": return new DdsExtractor();
+                case "IdeaFactory - pck": return new StingPckExtractor();
+                case "IdeaFactory - tex": return new StingTexExtractor();
+                case "SEGS binary data - bin":return new SEGS_BinExtractor();
+                case "FPAC archives - pac": return new FPAC_Extractor();
+                case "PlayStation 4 bit ADPCM - vag": return new VagExtractor();
+                case "断罪的玛利亚 - dat": return new DataDatExtractor();
+                case "进击的巨人_自由之翼 - bin": return new Attack_on_Titan_Wings_Extractor();
+                case "索尼 - gxt转换器": return new SonyGxtConverter();
+                case "零：濡鸦之巫女 - fmsg": return new FMSG_Extractor();
+                case "零：濡鸦之巫女 - kscl": return new KSCL_Extractor();
+                case "女神异闻录5对决：幽灵先锋 - bin": return new P5S_WMV_Extractor();
+                case "MPEG-4 - mp4": return new MP4_Extractor();
                 default: throw new NotSupportedException($"不支持的格式: {formatName}");
             }
         }
