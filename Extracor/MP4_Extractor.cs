@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -11,6 +11,10 @@ namespace super_toolbox
     public class MP4_Extractor : BaseExtractor
     {
         private static readonly byte[] MP4_SIGNATURE = { 0x66, 0x74, 0x79, 0x70 }; // "ftyp"
+        private static readonly HashSet<string> VALID_BRANDS = new HashSet<string>
+        {
+            "mp41", "mp42", "isom", "avc1", "M4V ", "M4A ", "M4P ", "M4B ", "qt  ", "iso2", "3g2a", "drc1", "F4V", "F4P", "F4A", "F4B", "mmp4"// 常见合法的MP4品牌标识
+        };
 
         public override async Task ExtractAsync(string directoryPath, CancellationToken cancellationToken = default)
         {
@@ -36,7 +40,7 @@ namespace super_toolbox
                         try
                         {
                             byte[] content = File.ReadAllBytes(filePath);
-                            ExtractMP4Files(content, filePath, extractedDir, extractedFiles);
+                            ExtractValidMP4Files(content, filePath, extractedDir, extractedFiles);
                         }
                         catch (Exception ex)
                         {
@@ -61,17 +65,32 @@ namespace super_toolbox
             }
         }
 
-        private void ExtractMP4Files(byte[] content, string filePath, string extractedDir, ConcurrentBag<string> extractedFiles)
+        private void ExtractValidMP4Files(byte[] content, string filePath, string extractedDir, ConcurrentBag<string> extractedFiles)
         {
             int index = 0;
             int count = 0;
 
-            while (index < content.Length)
+            while (index < content.Length - 8) 
             {
                 int signatureIndex = IndexOf(content, MP4_SIGNATURE, index);
                 if (signatureIndex == -1)
                 {
                     break;
+                }
+
+                if (signatureIndex + 8 >= content.Length)
+                {
+                    index = signatureIndex + 1;
+                    continue;
+                }
+
+                string brand = System.Text.Encoding.ASCII.GetString(
+                    content, signatureIndex + 4, 4);
+
+                if (!VALID_BRANDS.Contains(brand))
+                {
+                    index = signatureIndex + 1;
+                    continue;
                 }
 
                 int headerStartIndex = signatureIndex - 4;
@@ -107,7 +126,7 @@ namespace super_toolbox
                     OnExtractionFailed($"写入文件 {outputFilePath} 时发生错误: {ex.Message}");
                 }
 
-                index = signatureIndex + 1;
+                index = endIndex;
             }
         }
 
