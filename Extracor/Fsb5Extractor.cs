@@ -12,14 +12,22 @@ namespace super_toolbox
     {
         private static readonly byte[] FSB5_MAGIC = { 0x46, 0x53, 0x42, 0x35, 0x01, 0x00, 0x00, 0x00 };
         private static readonly object consoleLock = new object();
+        private const int BUFFER_SIZE = 1024 * 1024; // 1MB缓冲区
+        private const byte JC4_PADDING_BYTE = 0x30; // 正当防卫4填充字节
 
         public override async Task ExtractAsync(string directoryPath, CancellationToken cancellationToken = default)
         {
+            if (string.IsNullOrEmpty(directoryPath))
+                throw new ArgumentException("目录路径不能为空", nameof(directoryPath));
+
             await Task.Run(() => Extract(directoryPath), cancellationToken);
         }
 
         public override void Extract(string directoryPath)
         {
+            if (string.IsNullOrEmpty(directoryPath))
+                throw new ArgumentException("目录路径不能为空", nameof(directoryPath));
+
             var outputQueue = new BlockingCollection<string>();
 
             var outputThread = new Thread(() =>
@@ -42,15 +50,21 @@ namespace super_toolbox
 
                 bool hasArcFiles = allFiles.Any(f => f.EndsWith(".arc", StringComparison.OrdinalIgnoreCase));
                 bool hasTabFiles = allFiles.Any(f => f.EndsWith(".tab", StringComparison.OrdinalIgnoreCase));
+                bool hasResourceFiles = allFiles.Any(f => f.EndsWith(".resource", StringComparison.OrdinalIgnoreCase));
 
                 if (hasArcFiles && hasTabFiles)
                 {
                     outputQueue.Add("检测到ARC和TAB文件，使用正当防卫4提取逻辑...");
                     ProcessJustCause4ArcFiles(allFiles, outputQueue);
                 }
+                else if (hasResourceFiles)
+                {
+                    outputQueue.Add("检测到RESOURCE文件，使用资源文件提取逻辑...");
+                    ProcessResourceFiles(allFiles, outputQueue);
+                }
                 else
                 {
-                    outputQueue.Add("未检测到ARC和TAB文件，使用普通方法提取...");
+                    outputQueue.Add("未检测到特殊文件类型，使用普通方法提取...");
                     ProcessNormalFiles(allFiles, outputQueue);
                 }
             }
@@ -72,29 +86,27 @@ namespace super_toolbox
             var arcFiles = allFiles.Where(f => f.EndsWith(".arc", StringComparison.OrdinalIgnoreCase)).ToList();
             outputQueue.Add($"找到 {arcFiles.Count} 个ARC文件");
 
-            foreach (var arcFilePath in arcFiles)
+            Parallel.ForEach(arcFiles, arcFilePath =>
             {
                 try
                 {
                     if (!HasFsbHeaderInSecondLine(arcFilePath))
                     {
-                        outputQueue.Add($"跳过 {arcFilePath}：第二行未找到FSB5头");
-                        continue;
+                        outputQueue.Add($"跳过 {Path.GetFileName(arcFilePath)}：第二行未找到FSB5头");
+                        return;
                     }
 
-                    var outputDir = Path.Combine(Path.GetDirectoryName(arcFilePath)!, "Extracted");
+                    string outputDir = Path.Combine(Path.GetDirectoryName(arcFilePath) ?? Directory.GetCurrentDirectory(), "Extracted");
                     Directory.CreateDirectory(outputDir);
-                    var baseName = Path.GetFileNameWithoutExtension(arcFilePath);
+                    string baseName = Path.GetFileNameWithoutExtension(arcFilePath) ?? "unknown_arc";
 
-                    using var fs = new FileStream(arcFilePath, FileMode.Open, FileAccess.Read);
-                    var content = new byte[fs.Length];
-                    fs.Read(content, 0, (int)fs.Length);
-
+                    byte[] content = File.ReadAllBytes(arcFilePath);
                     var fsbPositions = FindFsbPositions(content);
+
                     if (!fsbPositions.Any())
                     {
-                        outputQueue.Add($"在 {arcFilePath} 中未找到FSB5标记");
-                        continue;
+                        outputQueue.Add($"在 {Path.GetFileName(arcFilePath)} 中未找到FSB5标记");
+                        return;
                     }
 
                     for (int i = 0; i < fsbPositions.Count; i++)
@@ -102,31 +114,174 @@ namespace super_toolbox
                         int startPos = fsbPositions[i];
                         int endPos = i < fsbPositions.Count - 1 ? fsbPositions[i + 1] : content.Length;
 
-                        var extractedData = new byte[endPos - startPos];
+                        byte[] extractedData = new byte[endPos - startPos];
                         Array.Copy(content, startPos, extractedData, 0, extractedData.Length);
 
-                        var outputFilePath = Path.Combine(outputDir, $"{baseName}_{i}.fsb");
-                        File.WriteAllBytes(outputFilePath, extractedData);
+                        string outputPath = Path.Combine(outputDir, $"{baseName}_{i}.fsb");
 
-                        outputQueue.Add($"已提取: {outputFilePath} (位置: {startPos}-{endPos})");
+                        File.WriteAllBytes(outputPath, extractedData);
 
-                        ProcessExtractedFile(outputFilePath, outputQueue);
+                        CleanJustCause4FsbFile(outputPath, outputQueue);
 
-                        OnFileExtracted(outputFilePath);
+                        OnFileExtracted(outputPath);
                     }
                 }
                 catch (Exception ex)
                 {
-                    outputQueue.Add($"处理 {arcFilePath} 时出错: {ex.Message}");
-                    OnExtractionFailed($"处理 {arcFilePath} 时出错: {ex.Message}");
+                    outputQueue.Add($"处理 {Path.GetFileName(arcFilePath)} 时出错: {ex.Message}");
+                    OnExtractionFailed($"处理 {Path.GetFileName(arcFilePath)} 时出错: {ex.Message}");
                 }
+            });
+        }
+
+        private void CleanJustCause4FsbFile(string filePath, BlockingCollection<string> outputQueue)
+        {
+            try
+            {
+                byte[] content = File.ReadAllBytes(filePath);
+                int originalLength = content.Length;
+
+                if (content.Length > 16)
+                {
+                    content = content.Take(content.Length - 16).ToArray();
+                }
+
+                int lastValidIndex = content.Length - 1;
+                while (lastValidIndex >= 0 && content[lastValidIndex] == JC4_PADDING_BYTE)
+                {
+                    lastValidIndex--;
+                }
+
+                if (lastValidIndex < content.Length - 1)
+                {
+                    content = content.Take(lastValidIndex + 1).ToArray();
+                }
+
+                File.WriteAllBytes(filePath, content);
+
+                outputQueue.Add($"已清理: {Path.GetFileName(filePath)} (原始大小: {originalLength} 字节, 清理后: {content.Length} 字节, 移除: {originalLength - content.Length} 字节)");
+            }
+            catch (Exception ex)
+            {
+                outputQueue.Add($"清理文件 {Path.GetFileName(filePath)} 时出错: {ex.Message}");
+                OnExtractionFailed($"清理文件 {Path.GetFileName(filePath)} 时出错: {ex.Message}");
+            }
+        }
+
+        private void ProcessResourceFiles(List<string> allFiles, BlockingCollection<string> outputQueue)
+        {
+            var resourceFiles = allFiles.Where(f => f.EndsWith(".resource", StringComparison.OrdinalIgnoreCase)).ToList();
+            outputQueue.Add($"找到 {resourceFiles.Count} 个RESOURCE文件");
+
+            Parallel.ForEach(resourceFiles, resourceFile =>
+            {
+                try
+                {
+                    if (!File.Exists(resourceFile))
+                    {
+                        outputQueue.Add($"文件不存在: {Path.GetFileName(resourceFile)}");
+                        return;
+                    }
+
+                    string directoryPath = Path.GetDirectoryName(resourceFile) ?? Directory.GetCurrentDirectory();
+                    string outputDir = Path.Combine(directoryPath, "Extracted");
+                    Directory.CreateDirectory(outputDir);
+                    string baseName = Path.GetFileNameWithoutExtension(resourceFile) ?? "unknown_resource";
+
+                    int count = 0;
+
+                    using (var fs = new FileStream(resourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, BUFFER_SIZE, FileOptions.SequentialScan))
+                    {
+                        byte[] buffer = new byte[BUFFER_SIZE];
+                        long filePosition = 0;
+                        int bytesRead;
+
+                        while ((bytesRead = fs.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            for (int i = 0; i < bytesRead - FSB5_MAGIC.Length; i++)
+                            {
+                                if (CheckMagicMatch(buffer, i))
+                                {
+                                    long startPos = filePosition + i;
+                                    long endPos = FindNextFsbPosition(fs, startPos + FSB5_MAGIC.Length);
+
+                                    if (endPos == -1)
+                                    {
+                                        endPos = fs.Length;
+                                    }
+
+                                    ExtractFsbChunk(fs, startPos, endPos, outputDir, baseName, ref count, outputQueue);
+                                }
+                            }
+                            filePosition += bytesRead;
+                        }
+                    }
+
+                    if (count == 0)
+                    {
+                        outputQueue.Add($"跳过 {Path.GetFileName(resourceFile)}：未找到FSB5标记");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    outputQueue.Add($"处理 {Path.GetFileName(resourceFile)} 时出错: {ex.Message}");
+                    OnExtractionFailed($"处理 {Path.GetFileName(resourceFile)} 时出错: {ex.Message}");
+                }
+            });
+        }
+
+        private long FindNextFsbPosition(FileStream fs, long startPos)
+        {
+            byte[] buffer = new byte[BUFFER_SIZE];
+            fs.Position = startPos;
+            int bytesRead;
+
+            while ((bytesRead = fs.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                for (int i = 0; i < bytesRead - FSB5_MAGIC.Length; i++)
+                {
+                    if (CheckMagicMatch(buffer, i))
+                    {
+                        return fs.Position - bytesRead + i;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        private void ExtractFsbChunk(FileStream fs, long startPos, long endPos, string outputDir, string baseName, ref int count, BlockingCollection<string> outputQueue)
+        {
+            try
+            {
+                long size = endPos - startPos;
+                if (size <= 0) return;
+
+                fs.Position = startPos;
+                byte[] fsbData = new byte[size];
+                int totalRead = 0;
+
+                while (totalRead < size)
+                {
+                    int bytesRead = fs.Read(fsbData, totalRead, (int)Math.Min(BUFFER_SIZE, size - totalRead));
+                    if (bytesRead == 0) break;
+                    totalRead += bytesRead;
+                }
+
+                string outputPath = Path.Combine(outputDir, $"{baseName}_{count++}.fsb");
+                File.WriteAllBytes(outputPath, fsbData);
+
+                outputQueue.Add($"已提取: {Path.GetFileName(outputPath)} (大小: {fsbData.Length} 字节)");
+                OnFileExtracted(outputPath);
+            }
+            catch (Exception ex)
+            {
+                outputQueue.Add($"提取FSB块时出错: {ex.Message}");
             }
         }
 
         private void ProcessNormalFiles(List<string> allFiles, BlockingCollection<string> outputQueue)
         {
             var filesToProcess = allFiles.Where(f => !f.EndsWith(".fsb", StringComparison.OrdinalIgnoreCase)).ToList();
-
             outputQueue.Add($"找到 {filesToProcess.Count} 个待处理文件");
 
             Parallel.ForEach(filesToProcess, filePath =>
@@ -139,19 +294,20 @@ namespace super_toolbox
 
                     while ((position = FindFsb5Position(fileData, position)) >= 0)
                     {
-                        var nextPosition = FindFsb5Position(fileData, position + 4);
+                        var nextPosition = FindFsb5Position(fileData, position + FSB5_MAGIC.Length);
                         var fsbLength = (nextPosition > 0 ? nextPosition : fileData.Length) - position;
 
                         var fsbData = new byte[fsbLength];
                         Array.Copy(fileData, position, fsbData, 0, fsbLength);
 
+                        string fileDir = Path.GetDirectoryName(filePath) ?? Directory.GetCurrentDirectory();
                         var outputPath = Path.Combine(
-                            Path.GetDirectoryName(filePath) ?? Path.GetDirectoryName(filePath)!,
+                            fileDir,
                             $"{Path.GetFileNameWithoutExtension(filePath)}_{extractedCount}.fsb");
 
                         File.WriteAllBytes(outputPath, fsbData);
 
-                        outputQueue.Add($"已提取: {outputPath}");
+                        outputQueue.Add($"已提取: {Path.GetFileName(outputPath)} (大小: {fsbData.Length} 字节)");
                         OnFileExtracted(outputPath);
 
                         extractedCount++;
@@ -165,8 +321,8 @@ namespace super_toolbox
                 }
                 catch (Exception ex)
                 {
-                    outputQueue.Add($"处理 {filePath} 时出错: {ex.Message}");
-                    OnExtractionFailed($"处理 {filePath} 时出错: {ex.Message}");
+                    outputQueue.Add($"处理 {Path.GetFileName(filePath)} 时出错: {ex.Message}");
+                    OnExtractionFailed($"处理 {Path.GetFileName(filePath)} 时出错: {ex.Message}");
                 }
             });
         }
@@ -179,20 +335,24 @@ namespace super_toolbox
 
             for (int i = 16; i <= bytesRead - FSB5_MAGIC.Length; i++)
             {
-                if (buffer[i] == FSB5_MAGIC[0] &&
-                    buffer[i + 1] == FSB5_MAGIC[1] &&
-                    buffer[i + 2] == FSB5_MAGIC[2] &&
-                    buffer[i + 3] == FSB5_MAGIC[3] &&
-                    buffer[i + 4] == FSB5_MAGIC[4] &&
-                    buffer[i + 5] == FSB5_MAGIC[5] &&
-                    buffer[i + 6] == FSB5_MAGIC[6] &&
-                    buffer[i + 7] == FSB5_MAGIC[7])
+                if (CheckMagicMatch(buffer, i))
                 {
                     return true;
                 }
             }
-
             return false;
+        }
+
+        private bool CheckMagicMatch(byte[] data, int startIndex)
+        {
+            for (int j = 0; j < FSB5_MAGIC.Length; j++)
+            {
+                if (data[startIndex + j] != FSB5_MAGIC[j])
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private List<int> FindFsbPositions(byte[] content)
@@ -206,7 +366,7 @@ namespace super_toolbox
                 if (offset == -1) break;
 
                 positions.Add(offset);
-                offset++;
+                offset += FSB5_MAGIC.Length; 
             }
 
             return positions;
@@ -214,54 +374,17 @@ namespace super_toolbox
 
         private int FindFsb5Position(byte[] data, int startIndex)
         {
+            if (data == null || data.Length < FSB5_MAGIC.Length || startIndex < 0)
+                return -1;
+
             for (int i = startIndex; i <= data.Length - FSB5_MAGIC.Length; i++)
             {
-                if (data[i] == FSB5_MAGIC[0] &&
-                    data[i + 1] == FSB5_MAGIC[1] &&
-                    data[i + 2] == FSB5_MAGIC[2] &&
-                    data[i + 3] == FSB5_MAGIC[3] &&
-                    data[i + 4] == FSB5_MAGIC[4] &&
-                    data[i + 5] == FSB5_MAGIC[5] &&
-                    data[i + 6] == FSB5_MAGIC[6] &&
-                    data[i + 7] == FSB5_MAGIC[7])
+                if (CheckMagicMatch(data, i))
                 {
                     return i;
                 }
             }
-
             return -1;
-        }
-
-        private void ProcessExtractedFile(string filePath, BlockingCollection<string> outputQueue)
-        {
-            try
-            {
-                var content = File.ReadAllBytes(filePath);
-
-                if (content.Length > 16)
-                {
-                    content = content.Take(content.Length - 16).ToArray();
-                }
-
-                int endIndex = content.Length - 1;
-                while (endIndex >= 0 && content[endIndex] == 0x30)
-                {
-                    endIndex--;
-                }
-
-                if (endIndex < content.Length - 1)
-                {
-                    content = content.Take(endIndex + 1).ToArray();
-                }
-
-                File.WriteAllBytes(filePath, content);
-                outputQueue.Add($"已处理: {filePath}");
-            }
-            catch (Exception ex)
-            {
-                outputQueue.Add($"处理文件 {filePath} 时出错: {ex.Message}");
-                OnExtractionFailed($"处理文件 {filePath} 时出错: {ex.Message}");
-            }
         }
     }
 }
